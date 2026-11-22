@@ -1,15 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
+import { NavLink } from "react-router-dom";
 
 import { fetchHealth, fetchReadiness } from "@/services/health";
 
 const modules = [
-  "Latest Scan / Live View",
-  "Scan History",
-  "Quality Analytics",
-  "Rice Age",
-  "Reports",
-  "Batch Comparison",
-  "Alerts & Notifications",
+  { to: "/", label: "Latest Scan / Live View" },
+  { to: "/scan-history", label: "Scan History" },
+  { to: "/quality-analytics", label: "Quality Analytics" },
+  { to: "/rice-age", label: "Rice Age" },
+  { to: "/reports", label: "Reports" },
+  { to: "/batch-comparison", label: "Batch Comparison" },
+  { to: "/alerts", label: "Alerts & Notifications" },
 ];
 
 function StatusPill({ state }: { state: "ok" | "pending" | "error" }) {
@@ -27,7 +28,11 @@ function StatusPill({ state }: { state: "ok" | "pending" | "error" }) {
   );
 }
 
-export function FoundationOverview() {
+/**
+ * Operational status view. The departmental modules live at their own routes; this page
+ * keeps the live liveness/readiness checks reachable for operators and developers.
+ */
+export function SystemStatusPage() {
   const health = useQuery({ queryKey: ["health"], queryFn: fetchHealth, retry: 1 });
   const readiness = useQuery({
     queryKey: ["health", "ready"],
@@ -38,12 +43,10 @@ export function FoundationOverview() {
   return (
     <div className="space-y-8">
       <section className="rounded-xl border border-border-subtle bg-surface p-6 shadow-card">
-        <h1 className="text-xl font-semibold text-text">Rice Age Portal</h1>
+        <h1 className="text-xl font-semibold text-text">System status</h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-muted">
-          Phase 2 adds authentication, department isolation, administration, the device
-          registry and IoT scan ingestion. Departmental dashboards, analytics and batch
-          comparison follow in later phases; this page reports the live status of the
-          running services.
+          Live status of the running backend services. Departmental results are available
+          from the modules below; this page only reports service reachability.
         </p>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div className="rounded-lg border border-border-subtle p-4">
@@ -56,7 +59,9 @@ export function FoundationOverview() {
               />
             </div>
             <p className="mt-2 text-sm text-text">
-              {health.data ? `${health.data.service} · ${health.data.environment ?? "production"}` : "—"}
+              {health.data
+                ? `${health.data.service} · ${health.data.environment ?? "production"}`
+                : "—"}
             </p>
           </div>
           <div className="rounded-lg border border-border-subtle p-4">
@@ -83,13 +88,15 @@ export function FoundationOverview() {
         <div className="rounded-xl border border-border-subtle bg-surface p-6">
           <h2 className="text-base font-semibold text-text">Departmental modules</h2>
           <p className="mt-1 text-sm text-text-muted">
-            Backend foundations exist; the screens arrive in later phases.
+            Each module is a live, department-scoped view backed by the portal API.
           </p>
           <ul className="mt-4 divide-y divide-border-subtle">
             {modules.map((module) => (
-              <li key={module} className="flex items-center justify-between gap-4 py-2.5">
-                <span className="text-sm text-text">{module}</span>
-                <span className="text-xs font-medium text-text-muted">Planned</span>
+              <li key={module.to} className="flex items-center justify-between gap-4 py-2.5">
+                <NavLink to={module.to} className="text-sm text-text hover:text-brand">
+                  {module.label}
+                </NavLink>
+                <span className="text-xs font-medium text-text-muted">Open</span>
               </li>
             ))}
           </ul>

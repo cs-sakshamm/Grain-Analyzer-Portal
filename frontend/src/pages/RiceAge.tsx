@@ -2,7 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/features/auth/auth-context";
 import { apiGet } from "@/services/apiClient";
 
-interface AgeResultDetail {
+/** Mirrors GET /api/v1/scans/analytics/rice-age: age fields are flat per item. */
+interface RiceAgeScan {
+  scan_id: string;
+  sample_id: string;
+  batch_code: string | null;
+  lot_code: string | null;
   age_value_months: string | null;
   age_min_months: string | null;
   age_max_months: string | null;
@@ -12,14 +17,6 @@ interface AgeResultDetail {
   method: string | null;
   model_version: string | null;
   validation_status: string | null;
-}
-
-interface RiceAgeScan {
-  scan_id: string;
-  sample_id: string;
-  batch_code: string | null;
-  lot_code: string | null;
-  age: AgeResultDetail | null;
 }
 
 function getAgeStatusClass(
@@ -108,46 +105,41 @@ export function RiceAgePage() {
             </tr>
           </thead>
           <tbody>
-            {data.map((scan) => {
-              const age = scan.age;
-              return (
-                <tr key={scan.scan_id} className="border-y">
-                  <td className="p-3">
-                    <a
-                      href={`/scans/${scan.scan_id}`}
-                      className="text-text hover:text-brand underline"
-                    >
-                      {scan.sample_id}
-                    </a>
-                  </td>
-                  <td className="p-3">
-                    {age && age.age_value_months !== null && age.age_value_months !== "null" ? (
-                      <>
-                        {age.age_value_months} {age.unit || "months"}
-                      </>
-                    ) : (
-                      <span className="text-text-muted">Not available</span>
-                    )}
-                  </td>
-                  <td className="p-3">
-                    {age && age.age_category || "—"}
-                  </td>
-                  <td className="p-3">
-                    {age && age.proportion_percent !== null && age.proportion_percent !== "null" ? (
-                      <>
-                        {age.proportion_percent}%
-                      </>
-                    ) : (
-                      <span className="text-text-muted">—</span>
-                    )}
-                  </td>
-                  <td className="p-3">{age && age.method || "—"}</td>
-                  <td className="p-3"><span className={getAgeStatusClass(age?.validation_status as string | null)}>
-                      {ageStatusText(age?.validation_status as string | null)}</span>
-                  </td>
-                </tr>
-              );
-            })}
+            {data.map((scan) => (
+              <tr key={scan.scan_id} className="border-y">
+                <td className="p-3">
+                  <a
+                    href={`/scans/${scan.scan_id}`}
+                    className="text-text hover:text-brand underline"
+                  >
+                    {scan.sample_id}
+                  </a>
+                </td>
+                <td className="p-3">
+                  {scan.age_value_months !== null ? (
+                    <>
+                      {scan.age_value_months} {scan.unit || "months"}
+                    </>
+                  ) : (
+                    <span className="text-text-muted">Not available</span>
+                  )}
+                </td>
+                <td className="p-3">{scan.age_category || "—"}</td>
+                <td className="p-3">
+                  {scan.proportion_percent !== null ? (
+                    <>{scan.proportion_percent}%</>
+                  ) : (
+                    <span className="text-text-muted">—</span>
+                  )}
+                </td>
+                <td className="p-3">{scan.method || "—"}</td>
+                <td className="p-3">
+                  <span className={getAgeStatusClass(scan.validation_status)}>
+                    {ageStatusText(scan.validation_status)}
+                  </span>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

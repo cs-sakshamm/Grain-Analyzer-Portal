@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { useAuth } from "@/features/auth/auth-context";
-import { apiGet } from "@/services/apiClient";
+import { apiDownload, apiGet, errorMessage } from "@/services/apiClient";
 
 interface Measurement {
   metric_code: string;
@@ -63,6 +64,20 @@ interface LatestScanData {
 
 export function LatestScanPage() {
   const { user } = useAuth();
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  async function handleReportDownload(scanId: string, sampleId: string) {
+    setDownloadError(null);
+    setDownloading(true);
+    try {
+      await apiDownload(`/scans/${scanId}/report/download`, `${sampleId}-report.pdf`);
+    } catch (downloadFailure) {
+      setDownloadError(errorMessage(downloadFailure));
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   const { data, isLoading, isError } = useQuery<LatestScanData>({
     queryKey: ["latest-scan"],
@@ -224,21 +239,30 @@ export function LatestScanPage() {
           <p className="text-sm text-text-muted">Files</p>
           <ul className="list-disc pl-5 space-y-1">
             {scan.files.map((f) => (
-              <li key={f.filename} className="text-sm text-text">
-                {f.available ? (
-                  <a
-                    href={`/scans/${scan.id}/report/download`}
-                    className="text-brand underline cursor-pointer"
-                    target="_blank"
+              <li key={`${f.role}-${f.filename}`} className="text-sm text-text">
+                {f.role === "report_pdf" && f.available ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleReportDownload(scan.id, scan.sample_id)}
+                    disabled={downloading}
+                    className="text-brand underline cursor-pointer disabled:opacity-60"
                   >
-                    {f.filename}
-                  </a>
+                    {downloading ? "Preparing report…" : (f.filename ?? "Download report")}
+                  </button>
                 ) : (
-                  <span>{f.filename} (not available)</span>
+                  <span>
+                    {f.filename ?? f.role}
+                    {f.available ? " (private attachment)" : " (not available)"}
+                  </span>
                 )}
               </li>
             ))}
           </ul>
+          {downloadError ? (
+            <p role="alert" className="mt-2 text-sm text-status-flag">
+              {downloadError}
+            </p>
+          ) : null}
         </div>
       )}
     </div>

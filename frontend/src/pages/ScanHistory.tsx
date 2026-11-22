@@ -63,7 +63,7 @@ export function ScanHistoryPage() {
     queryKey: ["scan-history"],
     queryFn: async (): Promise<ScanHistoryData> => {
       const result: ScanHistoryData = await apiGet("/scans/history");
-      return result;      return result;
+      return result;
     },
     enabled: !!user,
     retry: 1,

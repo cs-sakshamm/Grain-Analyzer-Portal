@@ -61,32 +61,35 @@ another feature's internals. Cross-feature reuse is promoted to `components/`.
 
 ## 3. Routing
 
-| Path | Route | Access |
+Delivered routes (`frontend/src/routes/config.tsx` is authoritative):
+
+| Path | Module | Access |
 | --- | --- | --- |
 | `/login` | Login | Public (authenticated users redirect to `/`) |
-| `/` | Dashboard / Latest Scan | Any authenticated user |
-| `/scans` | Scan History | Any authenticated user |
-| `/scans/:scanId` | Scan Detail | Any authenticated user (scoped) |
-| `/analytics` | Quality Analytics | Any authenticated user |
+| `/` | Latest Scan | Any authenticated user |
+| `/scan-history` | Scan History | Any authenticated user |
+| `/quality-analytics` | Quality Analytics | Any authenticated user |
 | `/rice-age` | Rice Age | Any authenticated user |
 | `/reports` | Reports | Any authenticated user |
-| `/batches/compare` | Batch Comparison | Any authenticated user |
-| `/notifications` | Notifications | Any authenticated user |
-| `/admin` | Admin overview | `super_admin`, `department_admin` |
-| `/admin/departments` | Departments | `super_admin` |
-| `/admin/users` | Users & memberships | `super_admin`, `department_admin` (own department) |
-| `/admin/devices` | Devices & assignments | `super_admin` (full), `department_admin` (read-only own department) |
-| `/admin/audit` | Audit log | `super_admin` |
-| `/403` | Forbidden | Any |
-| `*` | Not Found | Any |
+| `/batch-comparison` | Batch Comparison | Any authenticated user |
+| `/alerts` | Alerts & Notifications | Any authenticated user |
+| `/scans/:scanId` | Scan Detail (optional `?department_id=` for super admin) | Any authenticated user (scoped) |
+| `/status` | System status (liveness/readiness) | Any authenticated user |
+| `*` | Not Found | Any authenticated user |
+
+Not implemented: `/admin*` screens and the `/403` page route (the `UnauthorizedPage`
+component is routed at `/unauthorized`). Admin capabilities exist only as APIs.
 
 Implementation notes:
 
-- Route definitions live in `src/routes/`; each route is lazy-loaded and wrapped by
-  `AppShell` or `AdminLayout`.
-- Guards (`RequireAuth`, `RequireRole`) redirect unauthenticated users to `/login`
-  with a safe return path, and render the forbidden state without flashing protected
-  content.
+- Route definitions live in `src/routes/config.tsx`; `routes.tsx` builds the browser
+  router from them. `config.tsx` stays DOM-free so `config.test.ts` can assert that `/`
+  renders Latest Scan and that all seven modules have their own path.
+- `ProtectedRoute` sends unauthenticated users to `/login` with the attempted path in
+  router state; `PublicOnlyRoute` sends authenticated users to `/`. Both are usability
+  guards only — the backend remains the security boundary.
+- Static hosting must serve `index.html` for unknown paths so deep links and refresh
+  work; `frontend/nginx.conf` does this and marks `index.html` as `no-cache`.
 - Admin navigation items are filtered by role, but the API still authorizes.
 - The department context is always visible in the header for multi-membership and
   super-admin users.

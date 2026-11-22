@@ -65,6 +65,25 @@ async function execute(path: string, options: RequestOptions): Promise<Response>
  * Single typed request path. A 401 triggers exactly one refresh attempt, then the
  * original request is replayed; the refresh call itself opts out so it cannot recurse.
  */
+async function errorFromResponse(response: Response): Promise<ApiError> {
+  let envelope: ErrorEnvelope = {};
+  try {
+    envelope = (await response.json()) as ErrorEnvelope;
+  } catch {
+    // Non-JSON error bodies are normalised below.
+  }
+  return new ApiError(
+    response.status,
+    envelope.error?.code ?? "unknown_error",
+    envelope.error?.message ?? `Request failed with status ${response.status}`,
+    envelope.error?.request_id ?? null,
+  );
+}
+
+/**
+ * Single typed request path. A 401 triggers exactly one refresh attempt, then the
+ * original request is replayed; the refresh call itself opts out so it cannot recurse.
+ */
 export async function apiRequest<T = unknown>(
   path: string,
   options: RequestOptions = {},
@@ -79,18 +98,7 @@ export async function apiRequest<T = unknown>(
   }
 
   if (!response.ok) {
-    let envelope: ErrorEnvelope = {};
-    try {
-      envelope = (await response.json()) as ErrorEnvelope;
-    } catch {
-      // Non-JSON error bodies are normalised below.
-    }
-    throw new ApiError(
-      response.status,
-      envelope.error?.code ?? "unknown_error",
-      envelope.error?.message ?? `Request failed with status ${response.status}`,
-      envelope.error?.request_id ?? null,
-    );
+    throw await errorFromResponse(response);
   }
 
   if (response.status === 204) {
@@ -98,6 +106,41 @@ export async function apiRequest<T = unknown>(
   }
 
   return (await response.json()) as T;
+}
+
+/**
+ * Authorized binary download. Signed URLs are not used for portal reports, so the
+ * access token must travel in the request header; the bytes are then handed to the
+ * browser as a private blob rather than linked from a bare href.
+ */
+export async function apiDownload(path: string, fallbackFilename: string): Promise<void> {
+  let response = await execute(path, { method: "GET" });
+
+  if (response.status === 401 && unauthorizedHandler) {
+    const refreshed = await unauthorizedHandler();
+    if (refreshed) {
+      response = await execute(path, { method: "GET" });
+    }
+  }
+
+  if (!response.ok) {
+    throw await errorFromResponse(response);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const matched = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  const encodedName = matched?.[1];
+  const filename = encodedName ? decodeURIComponent(encodedName) : fallbackFilename;
+
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
 }
 
 export function apiGet<T = unknown>(path: string, signal?: AbortSignal): Promise<T> {

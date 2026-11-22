@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { useAuth } from "@/features/auth/auth-context";
-import { apiGet } from "@/services/apiClient";
+import { apiDownload, apiGet, errorMessage } from "@/services/apiClient";
 
 interface ReportListingItem {
   scan_id: string;
@@ -35,6 +36,20 @@ function qualityVerdictText(verdict: string | null): string {
 
 export function ReportsPage() {
   const { user } = useAuth();
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  async function handleDownload(scanId: string, sampleId: string) {
+    setDownloadError(null);
+    setDownloading(scanId);
+    try {
+      await apiDownload(`/scans/${scanId}/report/download`, `${sampleId}-report.pdf`);
+    } catch (downloadFailure) {
+      setDownloadError(errorMessage(downloadFailure));
+    } finally {
+      setDownloading(null);
+    }
+  }
 
   const { data, isLoading, isError } = useQuery<ReportListingItem[]>({
     queryKey: ["reports"],
@@ -63,6 +78,14 @@ export function ReportsPage() {
     return (
       <div className="p-6 bg-surface rounded-lg">
         <p className="text-text-muted">No reports found</p>
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="p-6 bg-surface rounded-lg">
+        <p className="text-text-muted">No scans are available for this department yet.</p>
       </div>
     );
   }
@@ -146,27 +169,35 @@ export function ReportsPage() {
                   )}
                 </td>
                 <td className="p-3">
-                  {qualityVerdictText(report.quality_verdict)}
-                </td>
-                <td className="p-3 text-right">
                   <span className={qualityVerdictClass(report.quality_verdict)}>
-                    {report.quality_verdict || "—"}
+                    {qualityVerdictText(report.quality_verdict)}
                   </span>
                 </td>
                 <td className="p-3 text-right">
-                  <a
-                    href={`/scans/${report.scan_id}/report/download`}
-                    className="text-sm text-brand underline cursor-pointer"
-                    target="_blank"
-                  >
-                    Download
-                  </a>
+                  {report.has_report ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDownload(report.scan_id, report.sample_id)}
+                      disabled={downloading === report.scan_id}
+                      className="text-sm text-brand underline cursor-pointer disabled:opacity-60"
+                    >
+                      {downloading === report.scan_id ? "Preparing…" : "Download"}
+                    </button>
+                  ) : (
+                    <span className="text-sm text-text-muted">—</span>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {downloadError ? (
+        <p role="alert" className="text-sm text-status-flag">
+          {downloadError}
+        </p>
+      ) : null}
 
       {/* Advisory notice */}
       <div className="rounded-xl border border-border-subtle bg-surface p-4">
