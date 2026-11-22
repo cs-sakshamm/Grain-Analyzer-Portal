@@ -61,7 +61,10 @@ def test_inactive_user_cannot_log_in(client: TestClient, db: Session) -> None:
     )
 
     assert response.status_code == 403
-    assert response.json()["error"]["code"] == "account_inactive"def test_refresh_rotates_and_reuse_revokes_the_family(
+    assert response.json()["error"]["code"] == "account_inactive"
+
+
+def test_refresh_rotates_and_reuse_revokes_the_family(
     client: TestClient, seeded: dict, app
 ) -> None:
     login(client, seeded["user_a"])
