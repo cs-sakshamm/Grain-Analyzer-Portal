@@ -42,7 +42,8 @@ logs/
 
 # Uploaded and generated runtime files
 uploads/
-storage/
+/storage/
+backend/storage/
 media/
 tmp/
 
