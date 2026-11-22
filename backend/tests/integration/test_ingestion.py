@@ -106,7 +106,7 @@ def test_payload_department_is_rejected_not_trusted(client: TestClient, seeded: 
 
 
 def test_device_without_assignment_is_rejected(client: TestClient, db: Session) -> None:
-    department = make_department(db)
+    make_department(db)
     device = Device(
         device_uid="UNASSIGNED-1",
         serial_number="SN-UNASSIGNED-1",
