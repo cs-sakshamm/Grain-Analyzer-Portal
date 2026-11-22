@@ -252,6 +252,9 @@ def rotate_session(
         user_agent=user_agent,
         request_id=request_id,
     )
+    # Persist the revocation and the replacement together; without this the old token
+    # would stay valid and reuse detection could never trigger.
+    db.commit()
     return new_raw, user
 
 
