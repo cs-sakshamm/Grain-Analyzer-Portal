@@ -1,9 +1,28 @@
-import { ShieldCheck } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
+import { LogOut, ShieldCheck } from "lucide-react";
+import { useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
-const navigation = [{ to: "/", label: "Foundation" }];
+import { useAuth } from "@/features/auth/auth-context";
+import { displayName, primaryMembership, roleLabel } from "@/features/auth/guards";
+
+const navigation = [{ to: "/", label: "Overview" }];
 
 export function AppShell() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
+  const membership = primaryMembership(user);
+
+  async function handleLogout() {
+    setSigningOut(true);
+    try {
+      await logout();
+      navigate("/login", { replace: true });
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-border-subtle bg-surface">
@@ -35,9 +54,27 @@ export function AppShell() {
             ))}
           </nav>
 
-          <span className="ml-auto rounded-full border border-border-subtle bg-surface-muted px-3 py-1 text-xs font-medium text-text-muted">
-            Phase 1 · foundation
-          </span>
+          <div className="ml-auto flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-sm font-medium text-text">{displayName(user)}</p>
+              <p className="text-xs text-text-muted">
+                {user?.is_super_admin
+                  ? "Super admin"
+                  : membership
+                    ? `${membership.department_code} · ${roleLabel(membership)}`
+                    : "No department"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              disabled={signingOut}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle px-3 py-1.5 text-sm text-text-muted transition-colors hover:text-text disabled:opacity-60"
+            >
+              <LogOut aria-hidden="true" className="size-4" />
+              {signingOut ? "Signing out…" : "Sign out"}
+            </button>
+          </div>
         </div>
       </header>
 

@@ -8,6 +8,13 @@ type ErrorEnvelope = {
   };
 };
 
+type RequestOptions = {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  body?: unknown;
+  auth?: boolean;
+  signal?: AbortSignal;
+};
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -23,16 +30,53 @@ export class ApiError extends Error {
 }
 
 /**
- * Minimal JSON client. Feature modules add typed wrappers and parse responses with Zod;
- * components never call fetch directly.
+ * The access token lives in memory only. The refresh token is an HttpOnly cookie the
+ * browser sends automatically; it is never readable by JavaScript or persisted here.
  */
-export async function apiGet(path: string, signal?: AbortSignal): Promise<unknown> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: "GET",
-    headers: { Accept: "application/json" },
+let accessToken: string | null = null;
+let unauthorizedHandler: (() => Promise<boolean>) | null = null;
+
+export function setAccessToken(token: string | null): void {
+  accessToken = token;
+}
+
+export function setUnauthorizedHandler(handler: (() => Promise<boolean>) | null): void {
+  unauthorizedHandler = handler;
+}
+
+async function execute(path: string, options: RequestOptions): Promise<Response> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (options.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+  if (options.auth !== false && accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+  return fetch(`${API_BASE}${path}`, {
+    method: options.method ?? "GET",
+    headers,
     credentials: "include",
-    signal,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
   });
+}
+
+/**
+ * Single typed request path. A 401 triggers exactly one refresh attempt, then the
+ * original request is replayed; the refresh call itself opts out so it cannot recurse.
+ */
+export async function apiRequest<T = unknown>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  let response = await execute(path, options);
+
+  if (response.status === 401 && options.auth !== false && unauthorizedHandler) {
+    const refreshed = await unauthorizedHandler();
+    if (refreshed) {
+      response = await execute(path, options);
+    }
+  }
 
   if (!response.ok) {
     let envelope: ErrorEnvelope = {};
@@ -50,10 +94,14 @@ export async function apiGet(path: string, signal?: AbortSignal): Promise<unknow
   }
 
   if (response.status === 204) {
-    return undefined;
+    return undefined as T;
   }
 
-  return (await response.json()) as unknown;
+  return (await response.json()) as T;
+}
+
+export function apiGet<T = unknown>(path: string, signal?: AbortSignal): Promise<T> {
+  return apiRequest<T>(path, { signal });
 }
 
 export function errorMessage(error: unknown): string {

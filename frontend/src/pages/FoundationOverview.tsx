@@ -38,12 +38,12 @@ export function FoundationOverview() {
   return (
     <div className="space-y-8">
       <section className="rounded-xl border border-border-subtle bg-surface p-6 shadow-card">
-        <h1 className="text-xl font-semibold text-text">Rice Age Portal foundation</h1>
+        <h1 className="text-xl font-semibold text-text">Rice Age Portal</h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-muted">
-          Phase 1 establishes the architecture, database design, API contracts, security
-          model and reproducible development environment. The departmental dashboards are
-          not implemented yet; this page reports the live status of the backend
-          foundation.
+          Phase 2 adds authentication, department isolation, administration, the device
+          registry and IoT scan ingestion. Departmental dashboards, analytics and batch
+          comparison follow in later phases; this page reports the live status of the
+          running services.
         </p>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div className="rounded-lg border border-border-subtle p-4">
@@ -83,7 +83,7 @@ export function FoundationOverview() {
         <div className="rounded-xl border border-border-subtle bg-surface p-6">
           <h2 className="text-base font-semibold text-text">Departmental modules</h2>
           <p className="mt-1 text-sm text-text-muted">
-            Documented in Phase 1, implemented in Phase 2 and later.
+            Backend foundations exist; the screens arrive in later phases.
           </p>
           <ul className="mt-4 divide-y divide-border-subtle">
             {modules.map((module) => (
