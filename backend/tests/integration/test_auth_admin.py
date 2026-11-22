@@ -61,10 +61,9 @@ def test_inactive_user_cannot_log_in(client: TestClient, db: Session) -> None:
     )
 
     assert response.status_code == 403
-    assert response.json()["error"]["code"] == "account_inactive"
-
-
-def test_refresh_rotates_and_reuse_revokes_the_family(client: TestClient, seeded: dict) -> None:
+    assert response.json()["error"]["code"] == "account_inactive"def test_refresh_rotates_and_reuse_revokes_the_family(
+    client: TestClient, seeded: dict, app
+) -> None:
     login(client, seeded["user_a"])
     first_cookie = client.cookies.get("ra_refresh")
     rotated = client.post("/api/v1/auth/refresh")
@@ -72,17 +71,19 @@ def test_refresh_rotates_and_reuse_revokes_the_family(client: TestClient, seeded
     second_cookie = client.cookies.get("ra_refresh")
     assert second_cookie and second_cookie != first_cookie
 
+    # A fresh client with an explicit Cookie header avoids jar replacement semantics.
     # Replaying the rotated token is theft: the new one must die too.
-    client.cookies.clear()
-    client.cookies.set("ra_refresh", first_cookie, path="/api/v1/auth")
-    replay = client.post("/api/v1/auth/refresh")
-    assert replay.status_code == 401
-    assert replay.json()["error"]["code"] == "session_revoked"
+    with TestClient(app, raise_server_exceptions=False) as replay_client:
+        replay = replay_client.post(
+            "/api/v1/auth/refresh", headers={"Cookie": f"ra_refresh={first_cookie}"}
+        )
+        assert replay.status_code == 401, replay.text
+        assert replay.json()["error"]["code"] == "session_revoked"
 
-    client.cookies.clear()
-    client.cookies.set("ra_refresh", second_cookie, path="/api/v1/auth")
-    after_reuse = client.post("/api/v1/auth/refresh")
-    assert after_reuse.status_code == 401
+        after_reuse = replay_client.post(
+            "/api/v1/auth/refresh", headers={"Cookie": f"ra_refresh={second_cookie}"}
+        )
+        assert after_reuse.status_code == 401
 
 
 def test_logout_revokes_refresh_session(client: TestClient, seeded: dict) -> None:
