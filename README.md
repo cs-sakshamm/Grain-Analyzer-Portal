@@ -68,13 +68,10 @@ Rationale, responsibilities, alternatives and trade-offs:
 
 ---
 
-## 3. Repository layout
-
-```text
+## 3. Repository layout```text
 .
 ├── backend/                 FastAPI service: API, core config, db, security, storage, tests
 ├── frontend/                React + TypeScript portal shell and conventions
-├── device-simulator/        IoT device test harness (see its README)
 ├── docs/
 │   ├── architecture/        Repository audit, system architecture, frontend, storage
 │   ├── database/            ER model and schema reference
@@ -82,9 +79,6 @@ Rationale, responsibilities, alternatives and trade-offs:
 │   ├── security/            Security architecture and threat model
 │   ├── development/         Local setup, migrations, testing
 │   └── decisions/           Open stakeholder decisions
-├── infrastructure/
-│   ├── docker/              Dockerfiles and init assets
-│   └── deployment/          Environment-specific deployment notes/templates
 ├── references, requirements and documents/   Source PRD, SOR, APSCSCL sample
 ├── .github/workflows/       CI
 ├── docker-compose.yml       Development stack (PostgreSQL + backend + frontend)
