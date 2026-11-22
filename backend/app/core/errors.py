@@ -61,12 +61,14 @@ class AppError(Exception):
         code: str,
         message: str,
         details: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.code = code
         self.message = message
         self.details = details or {}
+        self.headers = headers
 
 
 def conflict(code: str, message: str, **details: Any) -> AppError:

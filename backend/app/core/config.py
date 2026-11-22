@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     app_secret_key: str = DEV_SECRET_PLACEHOLDER
     access_token_ttl_minutes: int = Field(default=15, ge=1, le=120)
     refresh_token_ttl_days: int = Field(default=7, ge=1, le=30)
+    jwt_issuer: str = "rice-age-portal"
+    jwt_audience: str = "rice-age-portal-api"
+    refresh_cookie_name: str = "ra_refresh"
+    # None means "secure everywhere except development/test", decided by environment.
+    refresh_cookie_secure: bool | None = None
+    login_max_attempts: int = Field(default=5, ge=1, le=100)
+    login_window_seconds: int = Field(default=900, ge=1, le=86400)
 
     database_url: str = "postgresql+psycopg://rice_age:rice_age@localhost:5432/rice_age"
     database_echo: bool = False
@@ -51,6 +58,14 @@ class Settings(BaseSettings):
     max_report_bytes: int = Field(default=25 * 1024 * 1024, ge=1024)
     max_image_bytes: int = Field(default=15 * 1024 * 1024, ge=1024)
     max_scan_payload_bytes: int = Field(default=1 * 1024 * 1024, ge=1024)
+
+    # PROVISIONAL until the attachment policy is confirmed (decision DR-007).
+    # Comma-separated scan_file_role values that finalize requires.
+    required_attachment_roles: str = "report_pdf,bottom_image"
+
+    storage_s3_bucket: str | None = None
+    storage_s3_region: str | None = None
+    storage_s3_endpoint_url: str | None = None
 
     @field_validator("log_level")
     @classmethod
@@ -76,6 +91,21 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.environment == "production"
 
+    @property
+    def refresh_cookie_secure_effective(self) -> bool:
+        """Secure cookies in production by default; plain HTTP only for local tests."""
+
+        if self.refresh_cookie_secure is None:
+            return self.is_production
+        return self.refresh_cookie_secure
+
+    @property
+    def required_attachment_role_list(self) -> list[str]:
+        """Required attachment roles, normalised and de-duplicated."""
+
+        roles = [role.strip() for role in self.required_attachment_roles.split(",")]
+        return list(dict.fromkeys(role for role in roles if role))
+
     @model_validator(mode="after")
     def _guard_production_secrets(self) -> Settings:
         if self.is_production:
@@ -95,6 +125,8 @@ class Settings(BaseSettings):
                 )
             if self.debug:
                 raise ValueError("debug must be disabled in production")
+            if self.storage_backend == "s3" and not self.storage_s3_bucket:
+                raise ValueError("storage_s3_bucket must be set when storage_backend is 's3'")
         return self
 
 

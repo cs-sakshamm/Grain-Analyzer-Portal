@@ -46,6 +46,7 @@ def test_production_liveness_withholds_internal_detail() -> None:
         environment="production",
         app_secret_key="production-secret-" + "b" * 40,
         storage_backend="s3",
+        storage_s3_bucket="rice-age-test",
         debug=False,
         database_url="postgresql+psycopg://user:pass@db:5432/rice_age",
     )

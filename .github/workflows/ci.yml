@@ -16,6 +16,23 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rice_age
+          POSTGRES_PASSWORD: rice_age
+          POSTGRES_DB: rice_age
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rice_age -d rice_age"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg://rice_age:rice_age@localhost:5432/rice_age
+      RICE_AGE_TEST_DATABASE_URL: postgresql+psycopg://rice_age:rice_age@localhost:5432/rice_age
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -29,6 +46,11 @@ jobs:
         run: ruff check .
       - name: Format check
         run: ruff format --check .
+      - name: Migrations
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
       - name: Tests
         run: pytest
 

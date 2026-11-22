@@ -11,6 +11,7 @@ VALID_PROD = {
     "environment": "production",
     "app_secret_key": "production-secret-" + "c" * 40,
     "storage_backend": "s3",
+    "storage_s3_bucket": "rice-age-prod",
     "debug": False,
     "database_url": "postgresql+psycopg://user:pass@db:5432/rice_age",
 }
@@ -51,6 +52,15 @@ def test_production_rejects_local_file_storage() -> None:
         Settings(**{**VALID_PROD, "storage_backend": "local"})
 
     assert "storage_backend" in str(excinfo.value)
+
+
+def test_production_requires_an_s3_bucket() -> None:
+    settings = {**VALID_PROD, "storage_s3_bucket": None}
+
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(**settings)
+
+    assert "storage_s3_bucket" in str(excinfo.value)
 
 
 def test_production_rejects_debug_mode() -> None:

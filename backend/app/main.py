@@ -99,6 +99,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 request_id=_request_id(request),
                 details=exc.details,
             ),
+            headers=exc.headers,
         )
 
     @app.exception_handler(RequestValidationError)
@@ -165,6 +166,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None if resolved.is_production else "/openapi.json",
     )
     app.state.settings = resolved
+    # Built on first use so health checks and tests do not construct a cloud client.
+    app.state.storage = None
 
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestIdMiddleware)
