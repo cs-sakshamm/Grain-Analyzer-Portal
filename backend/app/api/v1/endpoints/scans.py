@@ -1,4 +1,9 @@
-"""Portal read endpoints: latest completed scan, detail and report access."""
+"""Portal read endpoints: latest completed scan, detail and report access.
+
+Static paths (``/scans/history``, ``/scans/notifications``) must be registered before the
+dynamic ``/scans/{scan_id}`` route: FastAPI matches in declaration order, so otherwise
+``history`` and ``notifications`` are parsed as scan identifiers and rejected with 422.
+"""
 
 from __future__ import annotations
 
@@ -56,118 +61,7 @@ def latest_scan(
     return portal_service.scan_detail(db, scan)
 
 
-@router.get("/{scan_id}", response_model=None)
-def scan_detail(
-    scan_id: uuid.UUID,
-    request: Request,
-    department_id: uuid.UUID | None = Query(default=None),
-    principal: CurrentUser = Depends(require_portal_user),
-    db: Session = Depends(get_db),
-) -> dict:
-    resolved = resolve_department_id(
-        db,
-        user=principal.user,
-        memberships=principal.memberships,
-        requested_department_id=department_id,
-    )
-    scan = portal_service.get_scan_for_department(db, scan_id, resolved)
-    portal_service.audit_cross_department_read(
-        db,
-        user=principal.user,
-        scan=scan,
-        has_membership=_has_membership(principal, scan.department_id),
-        action="scan.cross_department_read",
-        request_id=request_id(request),
-        ip=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-    )
-    db.commit()
-    return portal_service.scan_detail(db, scan)
-
-
-@router.get("/{scan_id}/report", response_model=None)
-def report_metadata(
-    scan_id: uuid.UUID,
-    request: Request,
-    department_id: uuid.UUID | None = Query(default=None),
-    principal: CurrentUser = Depends(require_portal_user),
-    db: Session = Depends(get_db),
-    settings: Settings = Depends(get_app_settings),
-) -> dict:
-    resolved = resolve_department_id(
-        db,
-        user=principal.user,
-        memberships=principal.memberships,
-        requested_department_id=department_id,
-    )
-    scan = portal_service.get_scan_for_department(db, scan_id, resolved)
-    record = portal_service.report_file(db, scan)
-    expires_at = datetime.now(UTC) + timedelta(seconds=settings.storage_signed_url_ttl_seconds)
-    portal_service.audit_cross_department_read(
-        db,
-        user=principal.user,
-        scan=scan,
-        has_membership=_has_membership(principal, scan.department_id),
-        action="report.download_issued",
-        request_id=request_id(request),
-        ip=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-    )
-    db.commit()
-    return {
-        "url": f"{settings.api_v1_prefix}/scans/{scan.id}/report/download",
-        "expires_at": expires_at.isoformat(),
-        "filename": record.original_filename,
-        "size_bytes": record.size_bytes,
-        "sha256": record.sha256,
-        "advisory": ADVISORY,
-    }
-
-
-@router.get("/{scan_id}/report/download", response_model=None)
-def download_report(
-    scan_id: uuid.UUID,
-    request: Request,
-    department_id: uuid.UUID | None = Query(default=None),
-    disposition: str = Query(default="attachment", pattern="^(attachment|inline)$"),
-    principal: CurrentUser = Depends(require_portal_user),
-    db: Session = Depends(get_db),
-    storage: StoragePort = Depends(get_storage),
-) -> Response:
-    resolved = resolve_department_id(
-        db,
-        user=principal.user,
-        memberships=principal.memberships,
-        requested_department_id=department_id,
-    )
-    scan = portal_service.get_scan_for_department(db, scan_id, resolved)
-    record = portal_service.report_file(db, scan)
-    payload = portal_service.read_report_bytes(storage, record)
-    portal_service.audit_cross_department_read(
-        db,
-        user=principal.user,
-        scan=scan,
-        has_membership=_has_membership(principal, scan.department_id),
-        action="report.downloaded",
-        request_id=request_id(request),
-        ip=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-    )
-    db.commit()
-    return Response(
-        content=payload,
-        media_type=record.mime_type,
-        headers={
-            "Content-Disposition": (
-                f"{disposition}; filename*=UTF-8''{quote(record.original_filename)}"
-            ),
-            "X-Content-Type-Options": "nosniff",
-            "Cache-Control": "no-store",
-        },
-    )
-
-
-@router.get("/history", response_model=list[dict])
+@router.get("/history", response_model=dict)
 def scan_history(
     department_id: uuid.UUID | None = Query(default=None),
     batch_code: str | None = Query(default=None),
@@ -398,7 +292,7 @@ def rice_age_analytics(
     }
 
 
-@router.get("/analytics/reports", response_model=list[dict])
+@router.get("/analytics/reports", response_model=dict)
 def report_listing(
     department_id: uuid.UUID | None = Query(default=None),
     start_date: str | None = Query(default=None),
@@ -514,7 +408,7 @@ def batch_comparison(
     return {"batches": batches}
 
 
-@router.get("/notifications", response_model=list[dict])
+@router.get("/notifications", response_model=dict)
 def notification_listing(
     department_id: uuid.UUID | None = Query(default=None),
     unread_only: bool = Query(default=False),
@@ -555,3 +449,118 @@ def notification_listing(
             }
         )
     return {"items": result}
+
+
+# --------------------------------------------------------------- dynamic scan paths
+# Registered last so the static routes above are matched first.
+
+
+@router.get("/{scan_id}", response_model=None)
+def scan_detail(
+    scan_id: uuid.UUID,
+    request: Request,
+    department_id: uuid.UUID | None = Query(default=None),
+    principal: CurrentUser = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    resolved = resolve_department_id(
+        db,
+        user=principal.user,
+        memberships=principal.memberships,
+        requested_department_id=department_id,
+    )
+    scan = portal_service.get_scan_for_department(db, scan_id, resolved)
+    portal_service.audit_cross_department_read(
+        db,
+        user=principal.user,
+        scan=scan,
+        has_membership=_has_membership(principal, scan.department_id),
+        action="scan.cross_department_read",
+        request_id=request_id(request),
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return portal_service.scan_detail(db, scan)
+
+
+@router.get("/{scan_id}/report", response_model=None)
+def report_metadata(
+    scan_id: uuid.UUID,
+    request: Request,
+    department_id: uuid.UUID | None = Query(default=None),
+    principal: CurrentUser = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_app_settings),
+) -> dict:
+    resolved = resolve_department_id(
+        db,
+        user=principal.user,
+        memberships=principal.memberships,
+        requested_department_id=department_id,
+    )
+    scan = portal_service.get_scan_for_department(db, scan_id, resolved)
+    record = portal_service.report_file(db, scan)
+    expires_at = datetime.now(UTC) + timedelta(seconds=settings.storage_signed_url_ttl_seconds)
+    portal_service.audit_cross_department_read(
+        db,
+        user=principal.user,
+        scan=scan,
+        has_membership=_has_membership(principal, scan.department_id),
+        action="report.download_issued",
+        request_id=request_id(request),
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return {
+        "url": f"{settings.api_v1_prefix}/scans/{scan.id}/report/download",
+        "expires_at": expires_at.isoformat(),
+        "filename": record.original_filename,
+        "size_bytes": record.size_bytes,
+        "sha256": record.sha256,
+        "advisory": ADVISORY,
+    }
+
+
+@router.get("/{scan_id}/report/download", response_model=None)
+def download_report(
+    scan_id: uuid.UUID,
+    request: Request,
+    department_id: uuid.UUID | None = Query(default=None),
+    disposition: str = Query(default="attachment", pattern="^(attachment|inline)$"),
+    principal: CurrentUser = Depends(require_portal_user),
+    db: Session = Depends(get_db),
+    storage: StoragePort = Depends(get_storage),
+) -> Response:
+    resolved = resolve_department_id(
+        db,
+        user=principal.user,
+        memberships=principal.memberships,
+        requested_department_id=department_id,
+    )
+    scan = portal_service.get_scan_for_department(db, scan_id, resolved)
+    record = portal_service.report_file(db, scan)
+    payload = portal_service.read_report_bytes(storage, record)
+    portal_service.audit_cross_department_read(
+        db,
+        user=principal.user,
+        scan=scan,
+        has_membership=_has_membership(principal, scan.department_id),
+        action="report.downloaded",
+        request_id=request_id(request),
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return Response(
+        content=payload,
+        media_type=record.mime_type,
+        headers={
+            "Content-Disposition": (
+                f"{disposition}; filename*=UTF-8''{quote(record.original_filename)}"
+            ),
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        },
+    )

@@ -10,9 +10,14 @@ token issuance; scan submission with idempotency; attachment prepare/upload/fina
 device scan status; portal latest completed scan, scan detail and report
 metadata/download.
 
-**Documented only (not implemented):** scan history listing (§4.2), quality and age
-analytics (§4.5–4.6), batch comparison (§4.7), the notifications inbox (§4.8), and the
-password-reset flow (§2.5), which also awaits DR-011.
+Also implemented (see §4.9 for the delivered paths and shapes): scan history listing,
+quality and rice-age analytics, report listing, batch comparison and the notifications
+inbox. The paths in §4.2 and §4.5–4.8 are the original design baseline and were adjusted
+when implemented; §4.9 is authoritative for what runs today.
+
+**Documented only (not implemented):** the password-reset flow (§2.5, also awaits
+DR-011), notification read state, an audit read API, platen-image delivery and verdict
+corrections.
 
 The device contract is provisional: authentication mechanism, payload fields, file
 types and size limits await the firmware team (DR-004…DR-007). Changes to this
@@ -596,6 +601,34 @@ user. Marking read: `POST /api/v1/notifications/{id}/read` → `204`; marking an
 addressed to another user returns `404`.
 
 ---
+
+### 4.9 Implemented portal read endpoints (authoritative)
+
+All require a human bearer token. Department scope is resolved server-side; a super admin
+must pass `department_id`. `start_date` / `end_date` filter `analyzed_at`.
+
+| Method | Path | Response |
+| --- | --- | --- |
+| GET | `/api/v1/scans/latest` | §4.1 scan detail, or `204` when the department has no completed scan |
+| GET | `/api/v1/scans/history` | `{items, total, page, per_page, pages}` |
+| GET | `/api/v1/scans/{scan_id}` | §4.1 scan detail |
+| GET | `/api/v1/scans/{scan_id}/report` | `{url, expires_at, filename, size_bytes, sha256, advisory}` |
+| GET | `/api/v1/scans/{scan_id}/report/download` | Streamed PDF, `Cache-Control: no-store`; `?disposition=attachment\|inline` |
+| GET | `/api/v1/scans/analytics/quality` | `{total_scans, quality_distribution, status_distribution, parameter_summary}` |
+| GET | `/api/v1/scans/analytics/rice-age` | `{total_scans_with_age, age_results[]}` with flat age fields |
+| GET | `/api/v1/scans/analytics/reports` | `{items[]}` with `has_report`, `report_filename`, `age_available` |
+| GET | `/api/v1/scans/analytics/batch-comparison` | `{batches: {<batch_code>: [{scan_id, sample_id, measurements: {basis: [...]}}]}}` |
+| GET | `/api/v1/scans/notifications` | `{items[]}` for the caller only; `?unread_only=` supported |
+
+History filters: `batch_code`, `device_id`, `processing_status`, `quality_verdict`,
+`start_date`, `end_date`, `page`, `per_page`. `parameter_summary` is keyed by
+`metric_code` then `basis_unit` (`{count, min, max, avg}`) so incompatible bases are
+never blended. `age_results` carries `age_value_months`, `age_min_months`,
+`age_max_months`, `age_category`, `proportion_percent`, `unit`, `method`,
+`model_version`, `validation_status` per scan; missing age is `null`, never `0`.
+
+Static paths are declared before `/scans/{scan_id}` in the router; otherwise `history`
+and `notifications` would be parsed as scan identifiers.
 
 ## 5. Administration API
 
