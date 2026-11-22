@@ -1,0 +1,385 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rice-age.local/schemas/device-payload-1.0.json",
+  "title": "Rice Age device scan submission",
+  "description": "PROVISIONAL v1.0 contract for the structured JSON a Rice Age IoT analyser submits with POST /api/v1/device/scans. Derived from Rice_Age_SOR_V5 sections 5.3-5.4 and the APSCSCL Sample-0038 report. Fields marked PROVISIONAL depend on decisions DR-001..DR-004 and DR-007 and may change after firmware-team confirmation. Department ownership is never accepted from this payload; the server resolves it from the authenticated device's active assignment.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "client_scan_id", "sample", "analyzed_at", "analysis"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Payload contract version. The server rejects unsupported major versions. Current: 1.0."
+    },
+    "client_scan_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$",
+      "description": "Stable, device-generated identifier for this analysis. Combined with the authenticated device it is the idempotency key: replaying the same value with an identical payload is safe, with a different payload it returns HTTP 409."
+    },
+    "device_id": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "OPTIONAL. Logical device identifier. If present it must equal the device authenticated by the bearer token; a mismatch is rejected with 403. It never selects the department."
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sample_id"],
+      "properties": {
+        "sample_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Sample identifier printed on the device report, e.g. \"Sample-0038\"."
+        },
+        "batch_id": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "OPTIONAL. Batch code as supplied by the device, e.g. \"BATCH-2026-001\". Resolved or created within the device's department only."
+        },
+        "lot_id": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "OPTIONAL. Lot code, e.g. \"LOT-A\"."
+        },
+        "variety": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "OPTIONAL. Commodity/variety label as printed, e.g. \"Raw Rice\"."
+        }
+      }
+    },
+    "analyzed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Device-reported analysis completion time in RFC 3339 with offset. Server records receipt time separately; a device clock far in the future is rejected."
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["measurements"],
+      "description": "Grain and quality measurements. `measurements` is the extensible carrier; the flat grain fields below are accepted for convenience and normalised server-side.",
+      "properties": {
+        "grain_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "OPTIONAL. Total kernels counted. Normalised to measurements[code=grain_count, basis=count]."
+        },
+        "avg_length_mm": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "OPTIONAL. Mean grain length in millimetres. Normalised to measurements[code=avg_length_mm, basis=dimension]."
+        },
+        "avg_breadth_mm": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "OPTIONAL. Mean grain breadth in millimetres. Normalised to measurements[code=avg_breadth_mm, basis=dimension]."
+        },
+        "length_breadth_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "description": "OPTIONAL. L/B ratio. Normalised to measurements[code=length_breadth_ratio, basis=ratio]."
+        },
+        "grain_shape": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "OPTIONAL. Shape classification as supplied, e.g. \"Short Bold\". Stored as metadata, not interpreted."
+        },
+        "measurements": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "description": "Named measurements. Each value carries its own unit and basis so count-based and mass-based results for the same metric remain distinct.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "value", "unit", "basis"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "description": "Stable metric code, e.g. head_rice, big_broken, small_broken, total_broken, foreign_matter, damaged_grains, discoloured_grains, chalky_grains, dehusked_grains. New codes are accepted without a schema change."
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 120,
+                "description": "OPTIONAL. Device display name, e.g. \"Big Broken Grains (25% - 75%)\"."
+              },
+              "value": {
+                "type": "number",
+                "description": "Measured or estimated value. Must be non-negative; percentages are 0-100."
+              },
+              "unit": {
+                "type": "string",
+                "enum": ["percent", "mm", "ratio", "count", "gram"],
+                "description": "Unit of `value`."
+              },
+              "basis": {
+                "type": "string",
+                "enum": [
+                  "count_percent",
+                  "estimated_mass_percent",
+                  "physical_mass_percent",
+                  "physical_mass_grams",
+                  "count",
+                  "dimension",
+                  "ratio",
+                  "other"
+                ],
+                "description": "Measurement basis. The portal never converts between bases and never combines them in one aggregate. `estimated_mass_percent` is an optical estimate and must not be presented as a physical measurement."
+              },
+              "is_estimated": {
+                "type": "boolean",
+                "description": "OPTIONAL. Defaults to true for mass percentages and false for count/physical bases. Required to be true when basis is estimated_mass_percent."
+              },
+              "basis_note": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "OPTIONAL. Required when basis is `other`: a short description of the supplied basis."
+              }
+            },
+            "allOf": [
+              {
+                "if": { "properties": { "basis": { "const": "other" } }, "required": ["basis"] },
+                "then": { "required": ["basis_note"] }
+              },
+              {
+                "if": { "properties": { "basis": { "const": "count_percent" } }, "required": ["basis"] },
+                "then": { "properties": { "unit": { "const": "percent" }, "value": { "maximum": 100 } } }
+              },
+              {
+                "if": { "properties": { "basis": { "const": "estimated_mass_percent" } }, "required": ["basis"] },
+                "then": {
+                  "properties": {
+                    "unit": { "const": "percent" },
+                    "value": { "maximum": 100 },
+                    "is_estimated": { "const": true }
+                  }
+                }
+              },
+              {
+                "if": { "properties": { "basis": { "const": "physical_mass_percent" } }, "required": ["basis"] },
+                "then": { "properties": { "unit": { "const": "percent" }, "value": { "maximum": 100 } } }
+              },
+              {
+                "if": { "properties": { "basis": { "const": "physical_mass_grams" } }, "required": ["basis"] },
+                "then": { "properties": { "unit": { "const": "gram" } } }
+              },
+              {
+                "if": { "properties": { "basis": { "const": "dimension" } }, "required": ["basis"] },
+                "then": { "properties": { "unit": { "const": "mm" } } }
+              },
+              {
+                "if": { "properties": { "basis": { "const": "ratio" } }, "required": ["basis"] },
+                "then": { "properties": { "unit": { "const": "ratio" } } }
+              },
+              {
+                "if": { "properties": { "basis": { "const": "count" } }, "required": ["basis"] },
+                "then": { "properties": { "unit": { "const": "count" } } }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "rice_age": {
+      "description": "PROVISIONAL. Device-supplied rice-age output. May be null or omitted; the portal must render \"Not available\" and must never infer or zero-fill an age. The final shape, units and confidence semantics are pending DR-001..DR-003.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "age_value_months": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 600,
+          "description": "OPTIONAL. Scalar age in months, when the device supplies a point estimate."
+        },
+        "age_min_months": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 600,
+          "description": "OPTIONAL. Lower bound of a supplied range, e.g. 8 for \"8-10 Months\"."
+        },
+        "age_max_months": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 600,
+          "description": "OPTIONAL. Upper bound of a supplied range, e.g. 10."
+        },
+        "age_category": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "OPTIONAL. Category or label exactly as supplied, e.g. \"8-10 Months\" or \"Above 1 Year\"."
+        },
+        "proportion_percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "OPTIONAL. Share of the sample in this age bucket; the Sample-0038 certificate reports 100%."
+        },
+        "unit": {
+          "type": "string",
+          "maxLength": 24,
+          "description": "OPTIONAL. Declared unit, e.g. \"months\". Stored verbatim."
+        },
+        "method": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "OPTIONAL. Supplied method identifier, e.g. \"biochemical_colour\"."
+        },
+        "model_version": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "OPTIONAL. Algorithm/model version. Required before age results are compared across scans."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "OPTIONAL. Only when the device defines its semantics; the portal does not invent one."
+        },
+        "validation_status": {
+          "type": "string",
+          "enum": ["unvalidated", "provisional", "validated", "rejected"],
+          "description": "OPTIONAL. Validation provenance supplied by the device or pipeline."
+        },
+        "raw_value": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "OPTIONAL. Verbatim device text, e.g. \"8-10 Months (100%)\", retained for traceability."
+        }
+      },
+      "anyOf": [
+        { "required": ["age_value_months"] },
+        { "required": ["age_min_months"] },
+        { "required": ["age_max_months"] },
+        { "required": ["age_category"] }
+      ]
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Source evaluation as produced by the device. The portal stores and displays these values; it does not recompute verdicts (SOR section 8).",
+      "properties": {
+        "overall": {
+          "type": ["string", "null"],
+          "enum": ["pass", "flagged", "inconclusive", "lab_confirmation_required", null],
+          "description": "Device's overall quality verdict, independent of processing state."
+        },
+        "ruleset_version": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Ruleset identifier, e.g. \"demo-v1\". Not a claim of statutory validity."
+        },
+        "certification_status": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "e.g. \"advisory_only\". Display-only; the portal never asserts certification."
+        },
+        "parameters": {
+          "type": "array",
+          "maxItems": 200,
+          "description": "OPTIONAL per-parameter evaluations, including the stated limit.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["parameter_code", "status"],
+            "properties": {
+              "parameter_code": { "type": "string", "maxLength": 64 },
+              "basis": {
+                "type": "string",
+                "enum": [
+                  "count_percent",
+                  "estimated_mass_percent",
+                  "physical_mass_percent",
+                  "physical_mass_grams",
+                  "count",
+                  "dimension",
+                  "ratio",
+                  "other"
+                ],
+                "description": "Basis this verdict was evaluated against."
+              },
+              "measured_value": { "type": ["number", "null"] },
+              "threshold_value": { "type": ["number", "null"] },
+              "comparison_operator": {
+                "type": ["string", "null"],
+                "enum": ["gte", "lte", "gt", "lt", "eq", null],
+                "description": "Operator as supplied, not inferred from the limit text."
+              },
+              "source_limit_text": {
+                "type": "string",
+                "maxLength": 120,
+                "description": "Verbatim limit, e.g. \"Min 75.00%\"."
+              },
+              "status": {
+                "type": "string",
+                "enum": ["pass", "flagged", "inconclusive", "lab_confirmation_required"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "attachments": {
+      "type": "array",
+      "maxItems": 10,
+      "description": "Manifest of files the device intends to upload. Bytes are uploaded separately through the prepared-upload flow; this array declares roles and metadata only. Whether report_pdf and both images are mandatory is pending DR-007.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "content_type"],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": ["report_pdf", "bottom_image", "top_image", "other"],
+            "description": "report_pdf = original analysis PDF; bottom_image = primary platen capture; top_image = verification platen capture."
+          },
+          "content_type": {
+            "type": "string",
+            "enum": ["application/pdf", "image/jpeg", "image/png", "image/webp"],
+            "description": "Declared media type. The server validates magic bytes before accepting the file. The final allowlist is pending DR-006."
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "OPTIONAL display filename. Never used to build a storage key."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "OPTIONAL at manifest time; required at prepare. Upper limits are configurable and pending DR-005."
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$",
+            "description": "OPTIONAL here, required when preparing the upload so the server can verify integrity on finalize."
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "OPTIONAL. Required for role \"other\" to explain the attachment."
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "role": { "const": "other" } }, "required": ["role"] },
+            "then": { "required": ["note"] }
+          }
+        ]
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "OPTIONAL free-form device metadata (firmware context, station identifiers). Stored as-is and never used for authorization.",
+      "maxProperties": 30,
+      "additionalProperties": {
+        "type": ["string", "number", "boolean", "null"]
+      }
+    }
+  }
+}
