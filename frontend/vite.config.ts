@@ -15,7 +15,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: process.env.VITE_PROXY_TARGET ?? "http://localhost:8000",
+        // Port 8000 is commonly occupied by other local services. Compose supplies
+        // its internal backend hostname; standalone development uses 8001.
+        target: process.env.VITE_PROXY_TARGET ?? "http://localhost:8001",
         changeOrigin: true,
       },
     },

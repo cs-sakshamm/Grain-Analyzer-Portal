@@ -12,6 +12,8 @@ DO NOT run against production databases.
 import os
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import func
+
 from app.core.config import get_settings
 from app.db.session import get_session_factory
 from app.models.analysis import AgeResult, Measurement, QualityEvaluation
@@ -42,11 +44,26 @@ def db_session():
 
 
 def add_if_not_exists(session, model_class, **filters):
-    """Add an instance only if no existing row matches the filters."""
-    # For User model: only filter by email (password_hash has random salt)
+    """Add an instance only if its stable natural key is not already present."""
+    # Do not include mutable/defaulted fields (password hashes, locations) in
+    # idempotency lookups. Those fields otherwise turn a repeat seed into a
+    # unique-key violation.
     if model_class == User:
         email = filters.get("email")
-        instance = session.query(model_class).filter_by(email=email).first() if email else None
+        instance = (
+            session.query(model_class).filter(func.lower(User.email) == email.lower()).first()
+            if email
+            else None
+        )
+    elif model_class == Department:
+        code = filters.get("code")
+        instance = (
+            session.query(model_class).filter(func.lower(Department.code) == code.lower()).first()
+            if code
+            else None
+        )
+    elif model_class == Device:
+        instance = session.query(model_class).filter_by(device_uid=filters["device_uid"]).first()
     else:
         instance = session.query(model_class).filter_by(**filters).first()
     if instance:

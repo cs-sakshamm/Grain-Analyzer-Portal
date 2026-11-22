@@ -97,8 +97,8 @@ docker compose up --build     # PostgreSQL + backend + frontend
 # backend
 cd backend && python -m venv .venv && source .venv/Scripts/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
-# http://localhost:8000/api/v1/health
+uvicorn app.main:app --reload --port 8001
+# http://localhost:8001/api/v1/health
 
 # frontend
 cd frontend && npm install && npm run dev
