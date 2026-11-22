@@ -165,6 +165,9 @@ update to `docs/database/DATABASE_SCHEMA.md`.
 
 ## 7. Checks and tests
 
+Full project-wide strategy, including the required suites per feature and
+acceptance-scenario traceability: [`docs/development/TESTING_STRATEGY.md`](TESTING_STRATEGY.md).
+
 Run everything the way CI does:
 
 ```bash
