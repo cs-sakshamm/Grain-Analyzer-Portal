@@ -52,3 +52,6 @@ test-results/
 
 # Docker/local runtime
 docker-data/
+
+# Local CI log scratch directory (never committed)
+.tmp-ci/

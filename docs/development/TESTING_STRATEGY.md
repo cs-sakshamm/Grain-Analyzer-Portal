@@ -265,3 +265,20 @@ rejection cases, and `docker compose config` syntax validation.
 - Docker runtime was not exercised (daemon unavailable in the authoring environment);
   Compose syntax was validated.
 - No E2E harness until the first real screen exists.
+
+---
+
+## 11. Phase 2 status
+
+Implemented locally and in CI:
+
+| Suite | What it covers |
+| --- | --- |
+| `tests/test_health.py`, `test_http_behaviour.py`, `test_config.py` | 22 foundation tests (unchanged) |
+| `tests/integration/test_schema_constraints.py` | Case-insensitive email uniqueness, one active assignment/credential, duplicate `client_scan_id`, completed-scan timestamp rule, measurement basis coexistence and unit rules, age information/range/zero, notification key uniqueness, batch uniqueness |
+| `tests/integration/test_auth_admin.py` | Login and cookie flags, generic failures, inactive accounts, refresh rotation and reuse revocation, logout, `me`, role denials, own-department limits, department creation, device lifecycle, reassignment history, token-plane separation, suspended devices, audit rows |
+| `tests/integration/test_ingestion.py` | Assignment-derived ownership, measurement-basis and age persistence, identical replay, conflicting replay, spoofed department rejection, unassigned device rejection, finalize prerequisites and idempotency, checksum rejection, latest-completed semantics, cross-department scan/report denial, null age, historical ownership |
+| `frontend/src/**/*.test.ts` | 15 tests: measurement/age formatting and auth guards |
+
+Integration suites are skipped when `RICE_AGE_TEST_DATABASE_URL` is absent; CI sets it
+and also runs `alembic upgrade head`, `downgrade base`, `upgrade head` before pytest.

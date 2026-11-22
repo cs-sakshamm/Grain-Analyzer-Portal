@@ -2,9 +2,10 @@
 
 **Engine:** PostgreSQL 16+ (partial unique indexes; `citext` extension; `NULLS NOT
 DISTINCT` for the batches unique index requires PostgreSQL 15+).
-**Status:** Phase 1 logical design. No Alembic revision is created in Phase 1 — the
-SOR describes this as a logical model, and open decisions (age shape, attachment
-policy, verdict rules) must be settled before the physical schema is fixed.
+**Status:** implemented in Phase 2 as migration `0001_initial_schema`. The logical
+model below is the reference; the notes at the end record deliberate physical
+differences. Open decisions still affect behaviour (attachment policy, verdict
+semantics) rather than the core shape, which is deliberately nullable and generic.
 
 Conventions used throughout:
 
@@ -708,3 +709,27 @@ No automatic deletion is implemented until the retention decision is signed off.
 | DR-013 — retention | Lifecycle jobs only |
 | DR-019 — Department Admin user management | Nothing in schema; authorization only |
 | DR-020 — comparison rules | Possibly a persisted comparison snapshot; not needed for MVP |
+
+---
+
+## 22. Physical implementation notes (Phase 2)
+
+The initial migration is `backend/migrations/versions/0001_initial_schema.py`. Deliberate
+differences from the logical text above:
+
+1. **Case-insensitive email/code without `citext`.** `users` and `departments` use
+   `lower(...)` expression unique indexes instead of the `citext` extension, so the
+   schema does not require an extension the deployment role may not be allowed to
+   create. Application code still normalises email to lowercase for lookup.
+2. **Batch uniqueness.** `NULLS NOT DISTINCT` is replaced by two partial unique indexes
+   (`... WHERE lot_code IS NULL` and `... WHERE lot_code IS NOT NULL`), which behave
+   identically and work on PostgreSQL 13+.
+3. **Enums are created explicitly** at the top of the migration (`CREATE TYPE`) and
+   dropped after the tables on downgrade, so the cycle is deterministic.
+4. **`audit_logs.metadata`** keeps its documented column name; the ORM attribute is
+   `AuditLog.meta` because `metadata` is reserved on declarative classes.
+5. **UUID defaults.** The application generates UUIDv4 values; the migration also sets
+   `gen_random_uuid()` (built into PostgreSQL 13+) as a database-side fallback.
+6. **Audit immutability** is enforced by convention and the service layer (insert-only,
+   no update/delete endpoints). The runtime role restriction described in §18 remains a
+   deployment task, because development uses a single owner role.

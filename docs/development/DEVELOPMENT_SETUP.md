@@ -259,3 +259,30 @@ Requires `pip install jsonschema` (already in `backend/requirements-dev.txt`).
 5. `cd backend && pytest` passes.
 6. `cd frontend && npm run lint && npm run typecheck && npm test && npm run build` passes.
 7. Frontend at http://localhost:5173 shows both backend status pills as reachable.
+
+---
+
+## Phase 2 database and tests
+
+Apply the schema and verify the cycle:
+
+```bash
+cd backend
+export DATABASE_URL='postgresql+psycopg://rice_age:<password>@localhost:5432/rice_age'
+alembic upgrade head
+alembic downgrade base
+alembic upgrade head
+```
+
+Integration tests require a **disposable PostgreSQL** database and are skipped without
+one; they are never run against SQLite because partial unique indexes, native enums,
+JSONB and INET are part of what is being verified:
+
+```bash
+export RICE_AGE_TEST_DATABASE_URL='postgresql+psycopg://rice_age:<password>@localhost:5432/rice_age_test'
+pytest
+```
+
+The test fixture drops and recreates the schema for each test. Use a dedicated database
+name; never point this variable at a database holding data you care about. CI starts a
+`postgres:16` service, runs the migration up/down/up cycle, then the full suite.

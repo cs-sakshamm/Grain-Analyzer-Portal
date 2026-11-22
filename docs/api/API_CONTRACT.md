@@ -1,9 +1,18 @@
 # API Contract — Rice Age Portal
 
 **Version:** v1 (design baseline)
-**Status:** Phase 1 contract. Endpoint paths follow SOR §5.2. Only
-`GET /api/v1/health` and `GET /api/v1/health/ready` are implemented in Phase 1; every
-other endpoint below is **documented only** and must not be described as working.
+**Status:** Phase 2. Endpoint paths follow SOR §5.2.
+
+Implemented and tested: health/readiness; human login, refresh, logout, `me` and
+password change; department/user/membership administration; device registration,
+status, assignment history, reassignment, credential issue/rotate/revoke; device
+token issuance; scan submission with idempotency; attachment prepare/upload/finalize;
+device scan status; portal latest completed scan, scan detail and report
+metadata/download.
+
+**Documented only (not implemented):** scan history listing (§4.2), quality and age
+analytics (§4.5–4.6), batch comparison (§4.7), the notifications inbox (§4.8), and the
+password-reset flow (§2.5), which also awaits DR-011.
 
 The device contract is provisional: authentication mechanism, payload fields, file
 types and size limits await the firmware team (DR-004…DR-007). Changes to this

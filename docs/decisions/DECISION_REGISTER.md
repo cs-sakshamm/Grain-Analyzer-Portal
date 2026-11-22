@@ -348,3 +348,42 @@ the feature.
   documents in the same change.
 - Closed decisions keep their entry (with the resolution) so the reasoning is auditable.
 - Schema-affecting decisions also update `docs/database/DATABASE_SCHEMA.md` §21.
+
+---
+
+## DR-024 — Interim Department Admin policy (implements part of DR-019)
+
+| Field | Content |
+| --- | --- |
+| **Current understanding** | DR-019's final matrix is still unconfirmed. Phase 2 therefore ships the conservative rule the API contract already described. |
+| **Implemented** | A Department Admin may list users, create users, assign memberships and change roles **only within their own department**. They may not create or promote a super admin, cannot act outside their department, and cannot manage devices or credentials. Every such action is audited. |
+| **Why this is safe** | It never grants more than the least-privilege reading of DR-019 and is enforced in the service layer, so widening it later is a policy change rather than a security fix. |
+| **Status** | Pending (provisional implementation recorded) |
+| **Stakeholder** | Product Owner / departmental administrators |
+
+## DR-025 — Provisional attachment policy (implements part of DR-007)
+
+| Field | Content |
+| --- | --- |
+| **Current understanding** | The contract example requires the original PDF and bottom image and treats the top image as optional; DR-007 is still open. |
+| **Implemented** | `REQUIRED_ATTACHMENT_ROLES` (default `report_pdf,bottom_image`) drives finalize. Changing the decision is configuration, not a migration. `top_image` and `other` are accepted but optional. |
+| **Status** | Pending (configurable provisional default) |
+| **Stakeholder** | Device team + Product Owner |
+
+## DR-026 — Rate limiting is in-process
+
+| Field | Content |
+| --- | --- |
+| **Current understanding** | Login and device-token throttling exist, but counters live in one process. |
+| **Impact** | Multiple API workers would each allow the configured quota; a shared store is required before horizontal scaling. Single-process deployment is the Phase 2 assumption. |
+| **Status** | Pending (tied to DR-010 deployment model) |
+| **Stakeholder** | Operations / architecture |
+
+## DR-027 — Authentication scope for Phase 2
+
+| Field | Content |
+| --- | --- |
+| **Current understanding** | Email + password, Argon2id, 15-minute access JWT in memory, rotating refresh cookie (`HttpOnly`, `SameSite=Strict`, `Secure` in production). |
+| **Not implemented** | MFA, SSO, and email-based password reset (DR-011). Password change is implemented and revokes other sessions. |
+| **Status** | Pending for the production experience; the conservative baseline is implemented |
+| **Stakeholder** | Security / Product Owner |

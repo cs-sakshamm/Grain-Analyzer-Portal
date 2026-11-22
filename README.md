@@ -138,3 +138,18 @@ Full prerequisites, migration and test commands, and troubleshooting:
   capabilities. Unresolved requirements go to the decision register.
 
 Engineering rules: [`AGENTS.md`](AGENTS.md).
+
+---
+
+## Implementation status
+
+**Phase 2 (backend functional):** executable database schema and migration; human
+authentication with rotating refresh sessions; department-scoped RBAC; department, user,
+device, credential and assignment administration; device client-credentials; idempotent
+scan ingestion; verified private attachments; finalize with deduplicated notifications;
+portal latest/detail/report reads; CLI device simulator; login and protected routes in
+the frontend.
+
+**Still documented only:** scan history, analytics, batch comparison, notification
+inbox, admin console screens, the seven departmental dashboards, and password reset by
+email. See `docs/api/API_CONTRACT.md` for the exact implemented endpoint list.
