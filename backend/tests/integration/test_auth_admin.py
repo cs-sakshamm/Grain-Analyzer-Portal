@@ -73,11 +73,13 @@ def test_refresh_rotates_and_reuse_revokes_the_family(client: TestClient, seeded
     assert second_cookie and second_cookie != first_cookie
 
     # Replaying the rotated token is theft: the new one must die too.
+    client.cookies.clear()
     client.cookies.set("ra_refresh", first_cookie, path="/api/v1/auth")
     replay = client.post("/api/v1/auth/refresh")
     assert replay.status_code == 401
     assert replay.json()["error"]["code"] == "session_revoked"
 
+    client.cookies.clear()
     client.cookies.set("ra_refresh", second_cookie, path="/api/v1/auth")
     after_reuse = client.post("/api/v1/auth/refresh")
     assert after_reuse.status_code == 401
