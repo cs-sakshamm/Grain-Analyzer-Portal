@@ -143,6 +143,13 @@ Engineering rules: [`AGENTS.md`](AGENTS.md).
 
 ## Implementation status
 
+**Phase 5 handover:** see [flow.md](flow.md),
+[REMAINING_IMPLEMENTATION_GUIDE.md](REMAINING_IMPLEMENTATION_GUIDE.md), and
+[`docs/development/DEPLOYMENT_GUIDE.md`](docs/development/DEPLOYMENT_GUIDE.md).
+The portal API, simulator boundary, database migrations and departmental pages exist;
+physical hardware mapping, production infrastructure, malware scanning and unresolved
+stakeholder decisions remain outside the completed software boundary.
+
 **Phase 2 (backend functional):** executable database schema and migration; human
 authentication with rotating refresh sessions; department-scoped RBAC; department, user,
 device, credential and assignment administration; device client-credentials; idempotent
