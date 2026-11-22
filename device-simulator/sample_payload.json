@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0",
+  "client_scan_id": "SIM-SAMPLE-0038",
+  "sample": {
+    "sample_id": "Sample-0038",
+    "batch_id": "BATCH-2026-001",
+    "lot_id": "LOT-A",
+    "variety": "Raw Rice"
+  },
+  "analyzed_at": "2026-11-20T16:37:52+05:30",
+  "analysis": {
+    "grain_count": 363,
+    "measurements": [
+      {
+        "code": "head_rice",
+        "label": "Head Rice",
+        "value": 50.68,
+        "unit": "percent",
+        "basis": "estimated_mass_percent",
+        "is_estimated": true
+      },
+      {
+        "code": "big_broken",
+        "label": "Big Broken",
+        "value": 30.68,
+        "unit": "percent",
+        "basis": "estimated_mass_percent",
+        "is_estimated": true
+      },
+      {
+        "code": "small_broken",
+        "label": "Small Broken",
+        "value": 50.69,
+        "unit": "percent",
+        "basis": "count_percent",
+        "is_estimated": false
+      },
+      {
+        "code": "avg_length_mm",
+        "label": "Average Length",
+        "value": 5.25,
+        "unit": "mm",
+        "basis": "dimension",
+        "is_estimated": false
+      },
+      {
+        "code": "avg_breadth_mm",
+        "label": "Average Breadth",
+        "value": 2.61,
+        "unit": "mm",
+        "basis": "dimension",
+        "is_estimated": false
+      }
+    ]
+  },
+  "rice_age": {
+    "age_min_months": 8,
+    "age_max_months": 10,
+    "age_category": "8-10 Months",
+    "proportion_percent": 100,
+    "unit": "months",
+    "method": "biochemical_colour",
+    "model_version": null,
+    "validation_status": "unvalidated",
+    "raw_value": "8-10 Months (100%)"
+  },
+  "evaluation": {
+    "overall": "flagged",
+    "ruleset_version": "demo-v1",
+    "certification_status": "advisory_only",
+    "parameters": [
+      {
+        "code": "head_rice",
+        "basis": "estimated_mass_percent",
+        "measured_value": 50.68,
+        "comparison_operator": "gte",
+        "source_limit_text": "Min 75.00%",
+        "status": "flagged"
+      },
+      {
+        "code": "small_broken",
+        "basis": "count_percent",
+        "measured_value": 50.69,
+        "comparison_operator": "lte",
+        "source_limit_text": "Max 1.00%",
+        "status": "flagged"
+      }
+    ]
+  },
+  "attachments": [
+    {
+      "role": "report_pdf",
+      "content_type": "application/pdf",
+      "filename": "Sample-0038.pdf"
+    }
+  ]
+}
