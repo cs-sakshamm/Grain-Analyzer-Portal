@@ -4,8 +4,17 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/auth-context";
 import { displayName, primaryMembership, roleLabel } from "@/features/auth/guards";
+import { canManageDepartment } from "@/features/auth/guards";
 
-const navigation = [{ to: "/", label: "Overview" }];
+const navigation = [
+  { to: "/", label: "Latest Scan", permission: ["department_user", "department_admin", "super_admin"] },
+  { to: "/scan-history", label: "Scan History", permission: ["department_user", "department_admin", "super_admin"] },
+  { to: "/quality-analytics", label: "Quality Analytics", permission: ["department_user", "department_admin", "super_admin"] },
+  { to: "/rice-age", label: "Rice Age", permission: ["department_user", "department_admin", "super_admin"] },
+  { to: "/reports", label: "Reports", permission: ["department_user", "department_admin", "super_admin"] },
+  { to: "/batch-comparison", label: "Batch Comparison", permission: ["department_user", "department_admin", "super_admin"] },
+  { to: "/alerts", label: "Alerts & Notifications", permission: ["department_user", "department_admin", "super_admin"] },
+];
 
 export function AppShell() {
   const { user, logout } = useAuth();
@@ -23,6 +32,24 @@ export function AppShell() {
     }
   }
 
+  // Determine which navigation items user can see
+  const userRole = membership?.role;
+  const userDepartment = membership?.department_id;
+
+  const filteredNavigation = navigation.filter((item) => {
+    // Check permission - simplified: all roles can see all modules, backend enforces auth
+    if (item.permission.includes("super_admin") && !user?.is_super_admin) {
+      return false;
+    }
+    if (item.permission.includes("department_admin") && !canManageDepartment(user, userDepartment ?? "")) {
+      return false;
+    }
+    if (item.permission.includes("department_user") && userRole !== "department_user" && userRole !== "department_admin") {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-border-subtle bg-surface">
@@ -36,18 +63,16 @@ export function AppShell() {
           </div>
 
           <nav aria-label="Primary" className="flex items-center gap-1 md:ml-6">
-            {navigation.map((item) => (
+            {filteredNavigation.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
-                className={({ isActive }) =>
-                  [
-                    "rounded-md px-3 py-1.5 text-sm transition-colors",
-                    isActive
-                      ? "bg-surface-muted font-medium text-brand-strong"
-                      : "text-text-muted hover:text-text",
-                  ].join(" ")
-                }
+                className={({ isActive }) => [
+                  "rounded-md px-3 py-1.5 text-sm transition-colors",
+                  isActive
+                    ? "bg-surface-muted font-medium text-brand-strong"
+                    : "text-text-muted hover:text-text",
+                ].join(" ")}
               >
                 {item.label}
               </NavLink>
