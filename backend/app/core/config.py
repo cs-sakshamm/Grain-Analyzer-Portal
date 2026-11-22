@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     login_max_attempts: int = Field(default=5, ge=1, le=100)
     login_window_seconds: int = Field(default=900, ge=1, le=86400)
 
-    database_url: str = "postgresql+psycopg://rice_age:rice_age@localhost:5432/rice_age"
+    database_url: str = "postgresql+psycopg://rice_age:rice_age@localhost:15432/rice_age"
     database_echo: bool = False
 
     cors_origins: str = "http://localhost:5173"

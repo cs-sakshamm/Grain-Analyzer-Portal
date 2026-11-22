@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -18,12 +19,11 @@ from app.api.deps import (
 )
 from app.core.config import Settings
 from app.db.session import get_db
-from app.models.analysis import AgeResult, Measurement, QualityEvaluation, Scan
-from app.models.enums import (
-    MeasurementBasis,
-    QualityVerdict,
-    ScanProcessingStatus,
-)
+from app.models.analysis import AgeResult, Measurement, Scan
+from app.models.device import Device
+from app.models.files import ScanFile
+from app.models.notifications import Notification, NotificationRecipient
+from app.models.organization import Department
 from app.services import portal_service
 from app.services.authorization import resolve_department_id
 from app.services.portal_service import ADVISORY
@@ -204,18 +204,14 @@ def scan_history(
 
     total = db.scalar(select(func.count()).select_from(query.subquery()))
     scans = db.scalars(
-        query.order_by(Scan.analyzed_at.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
+        query.order_by(Scan.analyzed_at.desc()).offset((page - 1) * per_page).limit(per_page)
     ).all()
 
     result = []
     for scan in scans:
         device = db.get(Device, scan.device_id)
         department = db.get(Department, scan.department_id)
-        measurements = db.scalars(
-            select(Measurement).where(Measurement.scan_id == scan.id)
-        ).all()
+        measurements = db.scalars(select(Measurement).where(Measurement.scan_id == scan.id)).all()
         age = db.scalar(select(AgeResult).where(AgeResult.scan_id == scan.id))
         result.append(
             {
@@ -268,6 +264,7 @@ def scan_history(
         "pages": (total + per_page - 1) // per_page,
     }
 
+
 @router.get("/analytics/quality", response_model=dict)
 def quality_analytics(
     department_id: uuid.UUID | None = Query(default=None),
@@ -312,9 +309,7 @@ def quality_analytics(
             status_counts[ss.value] = status_counts.get(ss.value, 0) + 1
 
         # Aggregate measurements across scans
-        meas = db.scalars(
-            select(Measurement).where(Measurement.scan_id == scan.id)
-        ).all()
+        meas = db.scalars(select(Measurement).where(Measurement.scan_id == scan.id)).all()
         for m in meas:
             code = m.metric_code
             if code not in param_values:
@@ -446,9 +441,7 @@ def report_listing(
                 "has_report": report is not None,
                 "report_filename": report.original_filename if report else None,
                 "age_available": age is not None,
-                "quality_verdict": scan.quality_verdict.value
-                if scan.quality_verdict
-                else None,
+                "quality_verdict": scan.quality_verdict.value if scan.quality_verdict else None,
                 "processing_status": scan.processing_status.value,
                 "device_uid": device.device_uid if device else None,
             }
@@ -487,9 +480,7 @@ def batch_comparison(
         if bc not in batches:
             batches[bc] = []
 
-        measurements = db.scalars(
-            select(Measurement).where(Measurement.scan_id == scan.id)
-        ).all()
+        measurements = db.scalars(select(Measurement).where(Measurement.scan_id == scan.id)).all()
         meas_dict: dict[str, dict[str, Any]] = {}
         for m in measurements:
             basis = m.basis.value
@@ -536,26 +527,31 @@ def notification_listing(
         memberships=principal.memberships,
         requested_department_id=department_id,
     )
-    query = select(Notification).where(Notification.department_id == resolved)
+    query = (
+        select(Notification, NotificationRecipient)
+        .join(NotificationRecipient, NotificationRecipient.notification_id == Notification.id)
+        .where(
+            Notification.department_id == resolved,
+            NotificationRecipient.user_id == principal.user.id,
+        )
+    )
     if unread_only:
-        query = query.where(Notification.read_at.is_(None))
+        query = query.where(NotificationRecipient.read_at.is_(None))
 
-    notifications = db.scalars(
-        query.order_by(Notification.created_at.desc())
-    ).all()
+    notifications = db.execute(query.order_by(Notification.created_at.desc())).all()
 
     result = []
-    for notif in notifications:
+    for notif, recipient in notifications:
         result.append(
             {
                 "id": str(notif.id),
-                "event_type": notif.event_type,
-                "severity": notif.severity,
+                "event_type": notif.event_type.value,
+                "severity": notif.severity.value,
                 "title": notif.title,
                 "body": notif.body,
                 "created_at": notif.created_at.isoformat(),
                 "scan_id": str(notif.scan_id) if notif.scan_id else None,
+                "read_at": recipient.read_at.isoformat() if recipient.read_at else None,
             }
         )
     return {"items": result}
-

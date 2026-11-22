@@ -12,31 +12,28 @@ DO NOT run against production databases.
 import os
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, func
-
-from app.core.config import get_settings, Settings
-from app.db.session import get_engine, get_session_factory
+from app.core.config import get_settings
+from app.db.session import get_session_factory
 from app.models.analysis import AgeResult, Measurement, QualityEvaluation
 from app.models.device import Device, DeviceAssignment
 from app.models.enums import (
+    AgeValidationStatus,
     MeasurementBasis,
     QualityVerdict,
     ScanProcessingStatus,
     UploadStatus,
-    AgeValidationStatus,
 )
-from app.models.files import ScanFile, UploadAttempt
-from app.models.identity import User, Membership
+from app.models.files import ScanFile
+from app.models.identity import Membership, User
+from app.models.notifications import Notification
 from app.models.organization import Department
-from app.models.notifications import Notification, NotificationRecipient
 from app.services.auth_service import hash_password
-from app.services.scan_service import utcnow
-from app.storage import StorageError, StoragePort, build_storage, get_storage
-
+from app.storage import StorageError, StoragePort, build_storage
 
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
+
 
 def db_session():
     """Return a new SQLAlchemy session bound to the engine."""
@@ -44,12 +41,17 @@ def db_session():
     return factory()
 
 
-def add_if_not_exists(session, model, **filters):
+def add_if_not_exists(session, model_class, **filters):
     """Add an instance only if no existing row matches the filters."""
-    instance = session.query(model).filter_by(**filters).first()
+    # For User model: only filter by email (password_hash has random salt)
+    if model_class == User:
+        email = filters.get("email")
+        instance = session.query(model_class).filter_by(email=email).first() if email else None
+    else:
+        instance = session.query(model_class).filter_by(**filters).first()
     if instance:
         return instance
-    new_instance = model(**filters)
+    new_instance = model_class(**filters)
     session.add(new_instance)
     session.flush()
     return new_instance
@@ -73,7 +75,7 @@ def create_users(session, dept_a, dept_b):
         session,
         User,
         email="super-admin@test.local",
-        password=hash_password("SuperAdmin123!"),
+        password_hash=hash_password("SuperAdmin123!"),
         full_name="Super Admin",
         is_super_admin=True,
     )
@@ -82,7 +84,7 @@ def create_users(session, dept_a, dept_b):
         session,
         User,
         email="admin@test.local",
-        password=hash_password("Admin123!"),
+        password_hash=hash_password("Admin123!"),
         full_name="Department Admin",
     )
 
@@ -90,25 +92,25 @@ def create_users(session, dept_a, dept_b):
         session,
         User,
         email="user@test.local",
-        password=hash_password("User123!"),
+        password_hash=hash_password("User123!"),
         full_name="Department User",
     )
 
-    # Membership: super admin has no department limitation
-    admin_membership = Membership(
+    # Membership: super admin has no department limitation (idempotent via add_if_not_exists)
+    add_if_not_exists(
+        session,
+        Membership,
         user_id=admin_user.id,
         department_id=dept_a.id,
         role="department_admin",
-        is_active=True,
     )
-    user_membership = Membership(
+    add_if_not_exists(
+        session,
+        Membership,
         user_id=regular_user.id,
         department_id=dept_a.id,
         role="department_user",
-        is_active=True,
     )
-    session.add_all([admin_membership, user_membership])
-    session.commit()
     return super_admin, admin_user, regular_user
 
 
@@ -140,58 +142,71 @@ def create_devices(session, dept_a, dept_b):
         status="active",
     )
 
-    # Assignment: device 1 -> dept A, device 2 -> dept B
-    assignment_1 = DeviceAssignment(
+    # Assignment: device 1 -> dept A, device 2 -> dept B (idempotent via add_if_not_exists)
+    add_if_not_exists(
+        session,
+        DeviceAssignment,
         device_id=device_1.id,
         department_id=dept_a.id,
-        effective_from=datetime.now(UTC),
-        assigned_by_user_id=None,
-        reason="Initial assignment",
     )
-    assignment_2 = DeviceAssignment(
+    add_if_not_exists(
+        session,
+        DeviceAssignment,
         device_id=device_2.id,
         department_id=dept_b.id,
-        effective_from=datetime.now(UTC),
-        assigned_by_user_id=None,
-        reason="Initial assignment",
     )
-    session.add_all([assignment_1, assignment_2])
-    session.commit()
     return device_1, device_2
 
 
 def create_scans(session, device_1, device_2, dept_a, dept_b):
     """Create demo scans with varied processing statuses and measurements."""
-    from app.models.analysis import AgeResult  # local import
+    from app.models.analysis import Scan  # local import
 
     now = datetime.now(UTC)
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
 
-    # Scan 1: completed, with age result, count_percent measurements
-    scan1 = Scan(
-        device_id=device_1.id,
-        department_id=dept_a.id,
-        client_scan_id="SCAN-001",
-        schema_version="1.0",
-        sample_id="SAMPLE-001",
-        batch_code="BATCH-001",
-        lot_code="LOT-001",
-        variety="Long-grain",
-        analyzed_at=week_ago + timedelta(hours=2),
-        received_at=week_ago + timedelta(hours=1),
-        processing_status=ScanProcessingStatus.COMPLETED,
-        quality_verdict=QualityVerdict.PASS,
-        ruleset_version="v1.2",
-        certification_status="certified",
-        raw_payload={"analysis": {"grain_count": 2500}, "variety": "Long-grain"},
-        payload_sha256="abc123",
-    )
-    session.add(scan1)
-    session.flush()
+    # Helper: get or create scan respecting unique constraint (device_id, client_scan_id)
+    def get_or_create_scan(filters, new_instance):
+        instance = (
+            session.query(Scan)
+            .filter_by(device_id=filters["device_id"], client_scan_id=filters["client_scan_id"])
+            .first()
+        )
+        if instance:
+            return instance
+        session.add(new_instance)
+        session.flush()
+        return new_instance
 
-    # Measurements for scan 1
-    meas1_a = Measurement(
+    # Scan 1: completed, with age result, count_percent measurements
+    scan1 = get_or_create_scan(
+        {"device_id": device_1.id, "client_scan_id": "SCAN-001"},
+        Scan(
+            device_id=device_1.id,
+            department_id=dept_a.id,
+            client_scan_id="SCAN-001",
+            schema_version="1.0",
+            sample_id="SAMPLE-001",
+            batch_code="BATCH-001",
+            lot_code="LOT-001",
+            variety="Long-grain",
+            analyzed_at=week_ago + timedelta(hours=2),
+            received_at=week_ago + timedelta(hours=1),
+            processing_status=ScanProcessingStatus.COMPLETED,
+            quality_verdict=QualityVerdict.PASS,
+            ruleset_version="v1.2",
+            certification_status="certified",
+            finalized_at=week_ago,
+            raw_payload={"analysis": {"grain_count": 2500}, "variety": "Long-grain"},
+            payload_sha256="abc123",
+        ),
+    )
+
+    # Measurements for scan 1 (idempotent via add_if_not_exists)
+    add_if_not_exists(
+        session,
+        Measurement,
         scan_id=scan1.id,
         metric_code="grain_count",
         metric_label="Grain Count",
@@ -200,7 +215,9 @@ def create_scans(session, device_1, device_2, dept_a, dept_b):
         basis=MeasurementBasis.COUNT_PERCENT,
         is_estimated=False,
     )
-    meas1_b = Measurement(
+    add_if_not_exists(
+        session,
+        Measurement,
         scan_id=scan1.id,
         metric_code="broken_kernels",
         metric_label="Broken Kernels",
@@ -209,10 +226,11 @@ def create_scans(session, device_1, device_2, dept_a, dept_b):
         basis=MeasurementBasis.COUNT_PERCENT,
         is_estimated=False,
     )
-    session.add_all([meas1_a, meas1_b])
 
-    # Age result for scan 1
-    age1 = AgeResult(
+    # Age result for scan 1 (idempotent via add_if_not_exists)
+    add_if_not_exists(
+        session,
+        AgeResult,
         scan_id=scan1.id,
         age_value_months=12,
         age_min_months=10,
@@ -224,54 +242,73 @@ def create_scans(session, device_1, device_2, dept_a, dept_b):
         model_version="v1.0",
         validation_status=AgeValidationStatus.VALIDATED,
     )
-    session.add(age1)
 
-    # Scan file (report PDF)
-    scan_file_pdf = ScanFile(
-        scan_id=scan1.id,
-        role="report_pdf",
-        storage_key=f"scans/{scan1.id}/report.pdf",
-        original_filename="scan-001-report.pdf",
-        mime_type="application/pdf",
-        size_bytes=102400,
-        sha256="def456",
-        upload_status=UploadStatus.VERIFIED,
-        verified_at=now,
+    # Scan file (report PDF) (idempotent via storage_key check)
+    existing_file = (
+        session.query(ScanFile).filter_by(storage_key=f"scans/{scan1.id}/report.pdf").first()
     )
+    if existing_file:
+        scan_file_pdf = existing_file
+    else:
+        scan_file_pdf = ScanFile(
+            scan_id=scan1.id,
+            role="report_pdf",
+            storage_backend="local",
+            storage_key=f"scans/{scan1.id}/report.pdf",
+            original_filename="scan-001-report.pdf",
+            mime_type="application/pdf",
+            size_bytes=102400,
+            sha256="def456",
+            upload_status=UploadStatus.VERIFIED,
+            verified_at=now,
+        )
+        session.add(scan_file_pdf)
+        session.flush()
     session.add(scan_file_pdf)
 
-    # Notification for scan completion
-    notif1 = Notification(
-        department_id=dept_a.id,
-        scan_id=scan1.id,
-        event_type="scan_completed",
-        severity="info",
-        title=f"Scan completed for {scan1.sample_id}",
-        body="A device analysis submission finished processing and is available.",
-    )
-    session.add(notif1)
+    # Notification for scan completion (idempotent via event_key check)
+    existing_notif = session.query(Notification).filter_by(event_key=str(scan1.id)).first()
+    if not existing_notif:
+        notif1 = Notification(
+            department_id=dept_a.id,
+            scan_id=scan1.id,
+            event_type="scan_completed",
+            event_key=str(scan1.id),
+            severity="info",
+            title=f"Scan completed for {scan1.sample_id}",
+            body="A device analysis submission finished processing and is available.",
+        )
+        session.add(notif1)
+    else:
+        notif1 = existing_notif
 
     # Scan 2: completed, no age result, physical_mass_percent measurements
-    scan2 = Scan(
-        device_id=device_2.id,
-        department_id=dept_b.id,
-        client_scan_id="SCAN-002",
-        schema_version="1.0",
-        sample_id="SAMPLE-002",
-        batch_code="BATCH-002",
-        lot_code="LOT-002",
-        variety="Medium-grain",
-        analyzed_at=now - timedelta(hours=1),
-        received_at=now - timedelta(days=1),
-        processing_status=ScanProcessingStatus.COMPLETED,
-        quality_verdict=QualityVerdict.FLAGGED,
-        raw_payload={"analysis": {"grain_count": 1800}, "variety": "Medium-grain"},
-        payload_sha256="ghi789",
+    scan2 = get_or_create_scan(
+        {"device_id": device_2.id, "client_scan_id": "SCAN-002"},
+        Scan(
+            device_id=device_2.id,
+            department_id=dept_b.id,
+            client_scan_id="SCAN-002",
+            schema_version="1.0",
+            sample_id="SAMPLE-002",
+            batch_code="BATCH-002",
+            lot_code="LOT-002",
+            variety="Medium-grain",
+            analyzed_at=now - timedelta(hours=1),
+            received_at=now - timedelta(hours=1),
+            processing_status=ScanProcessingStatus.COMPLETED,
+            quality_verdict=QualityVerdict.FLAGGED,
+            finalized_at=now - timedelta(days=1),
+            raw_payload={"analysis": {"grain_count": 1800}, "variety": "Medium-grain"},
+            payload_sha256="ghi789",
+        ),
     )
     session.add(scan2)
     session.flush()
 
-    meas2_a = Measurement(
+    add_if_not_exists(
+        session,
+        Measurement,
         scan_id=scan2.id,
         metric_code="physical_mass_percent",
         metric_label="Physical Mass %",
@@ -280,7 +317,9 @@ def create_scans(session, device_1, device_2, dept_a, dept_b):
         basis=MeasurementBasis.PHYSICAL_MASS_PERCENT,
         is_estimated=False,
     )
-    meas2_b = Measurement(
+    add_if_not_exists(
+        session,
+        Measurement,
         scan_id=scan2.id,
         metric_code="moisture_content",
         metric_label="Moisture Content",
@@ -289,38 +328,43 @@ def create_scans(session, device_1, device_2, dept_a, dept_b):
         basis=MeasurementBasis.PHYSICAL_MASS_PERCENT,
         is_estimated=False,
     )
-    session.add_all([meas2_a, meas2_b])
 
     # Scan 3: verifying, no quality verdict yet
-    scan3 = Scan(
-        device_id=device_1.id,
-        department_id=dept_a.id,
-        client_scan_id="SCAN-003",
-        schema_version="1.0",
-        sample_id="SAMPLE-003",
-        variety="Short-grain",
-        analyzed_at=month_ago + timedelta(days=3),
-        received_at=month_ago + timedelta(days=2),
-        processing_status=ScanProcessingStatus.VERIFYING,
-        raw_payload={"analysis": {"grain_count": 3200}, "variety": "Short-grain"},
-        payload_sha256="jkl012",
+    scan3 = get_or_create_scan(
+        {"device_id": device_1.id, "client_scan_id": "SCAN-003"},
+        Scan(
+            device_id=device_1.id,
+            department_id=dept_a.id,
+            client_scan_id="SCAN-003",
+            schema_version="1.0",
+            sample_id="SAMPLE-003",
+            variety="Short-grain",
+            analyzed_at=month_ago + timedelta(days=2),
+            received_at=month_ago + timedelta(days=2),
+            processing_status=ScanProcessingStatus.VERIFYING,
+            raw_payload={"analysis": {"grain_count": 3200}, "variety": "Short-grain"},
+            payload_sha256="jkl012",
+        ),
     )
     session.add(scan3)
     session.flush()
 
     # Scan 4: received, oldest
-    scan4 = Scan(
-        device_id=device_2.id,
-        department_id=dept_b.id,
-        client_scan_id="SCAN-004",
-        schema_version="1.0",
-        sample_id="SAMPLE-004",
-        variety="Long-grain",
-        analyzed_at=month_ago - timedelta(days=5),
-        received_at=month_ago - timedelta(days=6),
-        processing_status=ScanProcessingStatus.RECEIVED,
-        raw_payload={"analysis": {"grain_count": 2100}, "variety": "Long-grain"},
-        payload_sha256="mno345",
+    scan4 = get_or_create_scan(
+        {"device_id": device_2.id, "client_scan_id": "SCAN-004"},
+        Scan(
+            device_id=device_2.id,
+            department_id=dept_b.id,
+            client_scan_id="SCAN-004",
+            schema_version="1.0",
+            sample_id="SAMPLE-004",
+            variety="Long-grain",
+            analyzed_at=month_ago - timedelta(days=6),
+            received_at=month_ago - timedelta(days=6),
+            processing_status=ScanProcessingStatus.RECEIVED,
+            raw_payload={"analysis": {"grain_count": 2100}, "variety": "Long-grain"},
+            payload_sha256="mno345",
+        ),
     )
     session.add(scan4)
     session.flush()
@@ -348,15 +392,27 @@ def create_demo_data():
 
         # Create additional demo records (quality evaluations, upload attempts, etc.)
         print("Creating quality evaluations...")
-        eval1 = QualityEvaluation(
-            scan_id=scan1.id,
-            verdict=QualityVerdict.PASS,
-            evaluated_at=datetime.now(UTC),
-            evaluated_by_user_id=super_admin.id,
-            notes="Initial pass",
+        existing_eval = (
+            session.query(QualityEvaluation)
+            .filter(
+                QualityEvaluation.scan_id == scan1.id,
+                QualityEvaluation.parameter_code == "moisture_content",
+                QualityEvaluation.basis == MeasurementBasis.PHYSICAL_MASS_PERCENT,
+            )
+            .first()
         )
-        session.add(eval1)
-        session.commit()
+        if not existing_eval:
+            eval1 = QualityEvaluation(
+                scan_id=scan1.id,
+                parameter_code="moisture_content",
+                basis=MeasurementBasis.PHYSICAL_MASS_PERCENT,
+                status=QualityVerdict.PASS,
+                measured_value=12.5,
+            )
+            session.add(eval1)
+            session.commit()
+        else:
+            eval1 = existing_eval
 
         # Set storage
         settings = get_settings()
@@ -365,16 +421,19 @@ def create_demo_data():
         # Store the report PDF
         pdf_content = b"%PDF-1.4 fake pdf content for scan 001"
         try:
-            storage.save(f"scans/{scan1.id}/report.pdf", pdf_content, content_type="application/pdf")
+            storage.save(
+                f"scans/{scan1.id}/report.pdf", pdf_content, content_type="application/pdf"
+            )
             print(f"Stored report PDF for scan {scan1.id}")
         except StorageError:
-            print(f"Note: could not store PDF (storage may not be available)")
+            print("Note: could not store PDF (storage may not be available)")
 
         print("\n=== Demo data created successfully ===")
-        print(f"Departments: DEPT-A (Department A), DEPT-B (Department B)")
-        print(f"Users: super-admin@test.local, admin@test.local, user@test.local")
-        print(f"Devices: GRAIN-001 (Dept A), GRAIN-002 (Dept B)")
-        print(f"Scans: {scan1.sample_id} (completed, with age), {scan2.sample_id} (completed, flagged),")
+        print("Departments: DEPT-A (Department A), DEPT-B (Department B)")
+        print("Users: super-admin@test.local, admin@test.local, user@test.local")
+        print("Devices: GRAIN-001 (Dept A), GRAIN-002 (Dept B)")
+        print(f"Scans: {scan1.sample_id} (completed, with age),")
+        print(f"       {scan2.sample_id} (completed, flagged),")
         print(f"       {scan3.sample_id} (verifying), {scan4.sample_id} (received)")
         print("\nLogin credentials (development-only):")
         print("  super-admin: SuperAdmin123!")

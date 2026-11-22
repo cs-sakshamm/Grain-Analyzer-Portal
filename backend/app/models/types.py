@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import enum
 from typing import Any
 
 from sqlalchemy import Enum
 
 
-def pg_enum[E: enum.Enum](enum_cls: type[E], name: str, **kwargs: Any) -> Enum:
+def pg_enum(enum_cls: type, name: str, **kwargs: Any) -> Enum:
     """PostgreSQL native enum storing the member *values*, not member names.
 
     The type is created explicitly by the migration (and by ``create_all`` in tests)

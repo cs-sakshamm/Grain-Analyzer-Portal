@@ -4,6 +4,9 @@ import { apiGet } from "@/services/apiClient";
 
 interface ParameterSummaryEntry {
   count: number;
+  min?: number;
+  max?: number;
+  avg?: number;
 }
 
 interface ParameterSummary {
@@ -73,7 +76,7 @@ export function QualityAnalyticsPage() {
   // Get the top parameters for chart display
   const topParameters = Object.entries(parameter_summary)
     .slice(0, 5)
-    .map(([code, bases]: [string, any]) => ({
+    .map(([code, bases]) => ({
       code,
       bases: Object.entries(bases),
     }));
@@ -135,7 +138,7 @@ export function QualityAnalyticsPage() {
         <p className="text-xs font-medium text-text-muted">{param.code}</p>
         <div className="h-4 rounded mt-1">
           {param.bases.map(([basis, stats]) => {
-            const statsEntry: any = stats;
+            const statsEntry = stats as ParameterSummaryEntry;
             const pct = total_scans > 0 ? (statsEntry.count / total_scans) * 100 : 0;
             const color =
               basis.includes("count_percent")

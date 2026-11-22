@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -677,8 +677,19 @@ def assign_device(
     now = utcnow()
     previous = _active_assignment(db, device.id)
     previous_department_id = previous.department_id if previous else None
+
+    # Close the prior assignment before creating its replacement.  The explicit
+    # flush is deliberate: PostgreSQL's partial unique index permits only one
+    # active row, and SQLAlchemy otherwise may schedule the INSERT before this
+    # UPDATE.  Retaining the closed row is the device-assignment audit history.
     if previous is not None:
+        # ``effective_from`` can be database-generated and slightly ahead of
+        # the application clock.  The period constraint is strictly greater,
+        # so keep both ends monotonic even when those clocks differ.
+        now = max(now, previous.effective_from + timedelta(microseconds=1))
         previous.effective_to = now
+        db.flush()
+
     assignment = DeviceAssignment(
         device_id=device.id,
         department_id=department.id,

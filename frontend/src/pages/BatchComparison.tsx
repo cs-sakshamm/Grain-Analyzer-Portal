@@ -13,22 +13,24 @@ interface ScanMeasurement {
   [basis: string]: MeasurementValue[];
 }
 
-interface BatchComparisonData {
-  batches: Record<string, Array<{
-    scan_id: string;
-    sample_id: string;
-    measurements: ScanMeasurement;
-  }>>;
+interface BatchComparisonResponse {
+  batches: BatchGroups;
 }
+
+type BatchGroups = Record<string, Array<{
+  scan_id: string;
+  sample_id: string;
+  measurements: ScanMeasurement;
+}>>;
 
 export function BatchComparisonPage() {
   const { user } = useAuth();
 
-  const { data, isLoading, isError } = useQuery<BatchComparisonData>({
+  const { data, isLoading, isError } = useQuery<BatchGroups>({
     queryKey: ["batch-comparison"],
     queryFn: async () => {
-      const result: any = await apiGet("/scans/analytics/batch-comparison");
-      return result.batches || {};
+      const result = await apiGet<BatchComparisonResponse>("/scans/analytics/batch-comparison");
+      return result.batches;
     },
     enabled: !!user,
     retry: 1,
@@ -108,9 +110,11 @@ export function BatchComparisonPage() {
 
             // Collect all metric codes across scans in this batch
             const allMetrics = new Set<string>();
-            scans.forEach((scan: any) => {
+            scans.forEach((scan) => {
               Object.keys(scan.measurements).forEach((basis) => {
-                scan.measurements[basis].forEach((m: any) => allMetrics.add(m.metric_code));
+                (scan.measurements[basis] ?? []).forEach((measurement) =>
+                  allMetrics.add(measurement.metric_code)
+                );
               });
             });
 
@@ -122,23 +126,13 @@ export function BatchComparisonPage() {
 
             allMetrics.forEach((metricCode) => {
               const valuesByBasis: Array<{ basis: string; value: string; unit: string }> = [];
-              scans.forEach((scan: any) => {
+              scans.forEach((scan) => {
                 Object.keys(scan.measurements).forEach((basis) => {
-                  if (basis === "count_percent") {
-                    const m: any = scan.measurements[basis].find(
-                      (m: any) => m.metric_code === metricCode
-                    );
-                    if (m) valuesByBasis.push({ basis, value: m.value, unit: m.unit });
-                  } else if (basis === "estimated_mass_percent") {
-                    const m = scan.measurements[basis].find(
-                      (m: any) => m.metric_code === metricCode
-                    );
-                    if (m) valuesByBasis.push({ basis, value: m.value, unit: m.unit });
-                  } else {
-                    const m = scan.measurements[basis].find(
-                      (m: any) => m.metric_code === metricCode
-                    );
-                    if (m) valuesByBasis.push({ basis, value: m.value, unit: m.unit });
+                  const measurement = (scan.measurements[basis] ?? []).find(
+                    (item) => item.metric_code === metricCode
+                  );
+                  if (measurement) {
+                    valuesByBasis.push({ basis, value: measurement.value, unit: measurement.unit });
                   }
                 });
               });
