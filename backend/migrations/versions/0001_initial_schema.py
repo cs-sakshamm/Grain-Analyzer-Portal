@@ -508,7 +508,8 @@ def upgrade() -> None:
         sa.CheckConstraint("value >= 0", name="ck_measurements_value_non_negative"),
         sa.CheckConstraint(
             "is_estimated OR basis IN "
-            "('physical_mass_percent','physical_mass_grams','count','dimension','ratio','other')",
+            "('count_percent','physical_mass_percent','physical_mass_grams','count',"
+            "'dimension','ratio','other')",
             name="ck_measurements_estimated_basis",
         ),
         sa.CheckConstraint(

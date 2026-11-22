@@ -23,7 +23,7 @@ from app.models.enums import AuditActorType, MembershipRole
 from app.models.identity import Membership, User, UserSession
 from app.models.organization import Department
 from app.schemas.auth import MembershipView, UserView
-from app.services.audit import record_audit
+from app.services.audit import normalise_ip, record_audit
 
 
 @dataclass(frozen=True)
@@ -150,7 +150,7 @@ def create_session(
         token_family_id=uuid.uuid4(),
         issued_at=now,
         expires_at=now + timedelta(days=settings.refresh_token_ttl_days),
-        ip_address=ip_address if ip_address else None,
+        ip_address=normalise_ip(ip_address),
         user_agent=(user_agent or "")[:1000] or None,
     )
     db.add(session)
@@ -237,7 +237,7 @@ def rotate_session(
             token_family_id=session.token_family_id,
             issued_at=now,
             expires_at=now + timedelta(days=settings.refresh_token_ttl_days),
-            ip_address=ip_address if ip_address else None,
+            ip_address=normalise_ip(ip_address),
             user_agent=(user_agent or "")[:1000] or None,
         )
     )
