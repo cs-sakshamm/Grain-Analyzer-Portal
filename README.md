@@ -6,11 +6,14 @@ optical platen images. Departmental users review their latest **completed** scan
 historical records, quality analytics, any device-supplied rice-age output, batch
 comparisons, and the original reports.
 
-> **Status: Phase 1 — foundation and architecture.**
-> This repository currently contains architecture, database, API and security
-> documentation plus a runnable development skeleton (backend health surface,
-> frontend shell, PostgreSQL service, tests, CI). The seven departmental modules,
-> production authentication experience, and device integration are **not** built yet.
+> **Status: portal API and departmental UI implemented; hardware and production
+> infrastructure outstanding.**
+> The backend exposes human authentication, department-scoped administration, device
+> client-credentials, idempotent scan ingestion, verified private attachments, portal
+> reads and analytics. The frontend ships all seven departmental modules behind
+> authentication. Physical IoT integration, an admin console, malware scanning and
+> production infrastructure are **not** built yet. See
+> [`REMAINING_IMPLEMENTATION_GUIDE.md`](REMAINING_IMPLEMENTATION_GUIDE.md).
 
 > **Advisory positioning.** Outputs from the supplied prototype device are
 > experimental pre-inspection estimates. Optical percentages are not statutory
@@ -79,6 +82,8 @@ Rationale, responsibilities, alternatives and trade-offs:
 │   ├── security/            Security architecture and threat model
 │   ├── development/         Local setup, migrations, testing
 │   └── decisions/           Open stakeholder decisions
+├── postman/                 Postman collection, local environment, sample attachments,
+│                            API guide and OpenAPI cross-check tooling
 ├── references, requirements and documents/   Source PRD, SOR, APSCSCL sample
 ├── .github/workflows/       CI
 ├── docker-compose.yml       Development stack (PostgreSQL + backend + frontend)
@@ -125,6 +130,7 @@ Full prerequisites, migration and test commands, and troubleshooting:
 | [`docs/security/SECURITY_ARCHITECTURE.md`](docs/security/SECURITY_ARCHITECTURE.md) | Auth models, authorization, file security, threat model |
 | [`docs/development/DEVELOPMENT_SETUP.md`](docs/development/DEVELOPMENT_SETUP.md) | Reproducible local environment |
 | [`docs/decisions/DECISION_REGISTER.md`](docs/decisions/DECISION_REGISTER.md) | Open stakeholder decisions and technical impact |
+| [`postman/POSTMAN_API_GUIDE.md`](postman/POSTMAN_API_GUIDE.md) | Importing the Postman collection, authenticating as a human or a device, and testing every implemented API |
 
 ---
 
@@ -143,20 +149,23 @@ Engineering rules: [`AGENTS.md`](AGENTS.md).
 
 ## Implementation status
 
-**Phase 5 handover:** see [flow.md](flow.md),
-[REMAINING_IMPLEMENTATION_GUIDE.md](REMAINING_IMPLEMENTATION_GUIDE.md), and
-[`docs/development/DEPLOYMENT_GUIDE.md`](docs/development/DEPLOYMENT_GUIDE.md).
-The portal API, simulator boundary, database migrations and departmental pages exist;
-physical hardware mapping, production infrastructure, malware scanning and unresolved
-stakeholder decisions remain outside the completed software boundary.
-
-**Phase 2 (backend functional):** executable database schema and migration; human
+**Working today (backend + frontend):** executable database schema and migration; human
 authentication with rotating refresh sessions; department-scoped RBAC; department, user,
 device, credential and assignment administration; device client-credentials; idempotent
 scan ingestion; verified private attachments; finalize with deduplicated notifications;
-portal latest/detail/report reads; CLI device simulator; login and protected routes in
-the frontend.
+latest scan, scan detail, report download, scan history, quality analytics, rice-age
+analytics, report listing, batch comparison and notifications; a CLI device simulator.
 
-**Still documented only:** scan history, analytics, batch comparison, notification
-inbox, admin console screens, the seven departmental dashboards, and password reset by
-email. See `docs/api/API_CONTRACT.md` for the exact implemented endpoint list.
+The frontend serves the signed-in portal at `/` (Latest Scan) with Scan History, Quality
+Analytics, Rice Age, Reports, Batch Comparison, Alerts & Notifications and a System
+status page. `frontend/src/routes/config.tsx` is the single source of truth for routes.
+
+**API handover:** import [`postman/Rice_Age_Portal.postman_collection.json`](postman/Rice_Age_Portal.postman_collection.json)
+with [`postman/Rice_Age_Local.postman_environment.json`](postman/Rice_Age_Local.postman_environment.json)
+and follow [`postman/POSTMAN_API_GUIDE.md`](postman/POSTMAN_API_GUIDE.md). It covers all
+42 implemented operations, including the device ingestion lifecycle and the negative
+cases (idempotent replay, conflicting replay, cross-department access).
+
+**Not built yet:** physical hardware integration, admin console screens, password reset
+by email, notification read state, audit read API, platen image delivery, malware
+scanning and production infrastructure. See `REMAINING_IMPLEMENTATION_GUIDE.md`.
