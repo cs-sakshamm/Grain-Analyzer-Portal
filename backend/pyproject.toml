@@ -18,6 +18,10 @@ known-first-party = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The CI runner invokes the ``pytest`` console script, which does not add the
+# working directory to sys.path. Declaring it here keeps ``import app`` working
+# regardless of how pytest is launched.
+pythonpath = ["."]
 addopts = "-q --strict-markers"
 filterwarnings = ["error::DeprecationWarning:app.*"]
 
